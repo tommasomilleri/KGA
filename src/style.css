@@ -1,0 +1,47 @@
+/* Stile della scheda informativa */
+#info-panel {
+  position: absolute;
+  top: 0;
+  left: -400px; /* Nascosta fuori dallo schermo a sinistra */
+  width: 350px;
+  height: 100vh;
+  background-color: rgba(15, 15, 25, 0.85); /* Sfondo scuro semi-trasparente */
+  backdrop-filter: blur(10px); /* Effetto vetro sfocato */
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  transition: left 0.3s ease;
+  padding: 30px;
+  box-sizing: border-box;
+  z-index: 10;
+  color: white;
+}
+
+#info-panel.visible {
+  left: 0; /* Appare scorrendo da sinistra */
+}
+
+#close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 28px;
+  cursor: pointer;
+  float: right;
+  transition: color 0.2s;
+}
+
+#close-btn:hover {
+  color: #e24a4a;
+}
+
+#node-title {
+  margin-top: 40px;
+  border-bottom: 2px solid #7AA2C6;
+  padding-bottom: 10px;
+  font-size: 24px;
+}
+
+#node-description {
+  line-height: 1.6;
+  color: #cccccc;
+  font-size: 15px;
+}
