@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { db } from './db';
 import { initUI } from './ui';
-
+import { generateNodeInfo } from './ai';
 const container = document.getElementById('app');
 
 if (container) {
@@ -69,13 +69,30 @@ if (container) {
     const randomColor = palette[Math.floor(Math.random() * palette.length)];
 
     try {
+      // 1. Creiamo subito il nodo visivamente per non far aspettare l'utente
       await db.nodes.add({
         id: term,
         label: term,
-        info: "In attesa di definizione AI...",
+        info: "⏳ L'IA sta elaborando la definizione, attendere prego...",
         color: randomColor
       });
       await refreshGraph();
+      console.log(`Nodo "${term}" creato, in attesa dell'IA...`);
+
+      // 2. Chiediamo all'IA di scrivere la definizione (ci vorranno un paio di secondi)
+      const aiDescription = await generateNodeInfo(term);
+
+      // 3. Salviamo la definizione vera e propria nel database e aggiorniamo il nodo!
+      await db.nodes.update(term, { info: aiDescription });
+      await refreshGraph();
+      
+      // Se il pannello è aperto su quel nodo, lo aggiorniamo in tempo reale
+      const nodeDesc = document.getElementById('node-description');
+      const nodeTitle = document.getElementById('node-title');
+      if (nodeDesc && nodeTitle && nodeTitle.innerText === term) {
+          nodeDesc.innerText = aiDescription;
+      }
+
     } catch (error) {
       alert(`Il termine "${term}" esiste già nel tuo grafo!`);
     }
