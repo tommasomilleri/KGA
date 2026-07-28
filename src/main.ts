@@ -1,19 +1,13 @@
 import './style.css';
 import ForceGraph3D from '3d-force-graph';
 import Fuse from 'fuse.js';
-
-// Importiamo la struttura base e il DB
 import { db } from './data/db';
 import { safeAddNode } from './data/db-errors';
 import type { KGNode, KGLink } from './core/types';
-
-// Importiamo l'IA e la semantica
 import { embed } from './ai/embeddings';
-import { autoLink } from './ai/similarity';
+import { autoLink, linkId } from './ai/similarity';
 import { streamDefinition } from './ai/ollama';
 import { enqueue } from './ai/queue';
-
-// Importiamo la Grafica avanzata
 import { assignClusters } from './graph/clusters';
 import { createBloom, nodeObject } from './graph/effects';
 import { initUI } from './ui';
@@ -21,155 +15,117 @@ import { initUI } from './ui';
 const container = document.getElementById('app');
 
 if (container) {
-  // 1. INIZIALIZZAZIONE GRAFO 3D E GRAFICA
   const graph = ForceGraph3D()(container)
     .backgroundColor('#050510')
-    .nodeThreeObject(nodeObject) // Pallini personalizzati
-    .linkDirectionalParticles((l: any) => Math.round(l.weight * 4)) // Effetto particelle
+    .nodeThreeObject((n) => nodeObject(n as KGNode))
+    .linkDirectionalParticles((l) => Math.round((l as KGLink).weight * 4))
     .linkDirectionalParticleSpeed(0.004)
-    .linkWidth((l: any) => l.weight * 2)
-    .linkColor((l: any) => l.origin === 'manual' ? '#FCE676' : 'rgba(255,255,255,0.25)')
-    .linkLabel((l: any) => l.label ?? l.type);
+    .linkWidth((l) => (l as KGLink).weight * 2)
+    .linkColor((l) => ((l as KGLink).origin === 'manual' ? '#FCE676' : 'rgba(255,255,255,0.25)'))
+    .linkLabel((l) => (l as KGLink).label ?? (l as KGLink).type);
 
-  // Aggiungiamo il Bloom selettivo
   graph.postProcessingComposer().addPass(createBloom());
 
-  // 2. PANNELLO LATERALE E TELECAMERA
   const infoPanel = document.getElementById('info-panel');
   const nodeTitle = document.getElementById('node-title');
   const nodeDesc = document.getElementById('node-description');
   const closeBtn = document.getElementById('close-btn');
 
-  const flyToNode = (node: any) => {
-    const distance = 40;
-    const distRatio = 1 + distance / Math.hypot(node.x || 0, node.y || 0, node.z || 0);
-    graph.cameraPosition(
-      { x: (node.x||0) * distRatio, y: (node.y||0) * distRatio, z: (node.z||0) * distRatio },
-      node,
-      1500
-    );
+  const flyToNode = (node: KGNode) => {
+    const x = node.x ?? 0, y = node.y ?? 0, z = node.z ?? 0;
+    const dist = Math.hypot(x, y, z);
+    if (dist < 1e-6) {
+      graph.cameraPosition({ x: 0, y: 0, z: 120 }, { x, y, z }, 1500);
+    } else {
+      const distRatio = 1 + 40 / dist;
+      graph.cameraPosition({ x: x * distRatio, y: y * distRatio, z: z * distRatio }, node, 1500);
+    }
     if (nodeTitle && nodeDesc && infoPanel) {
-        nodeTitle.innerText = node.label;
-        nodeDesc.innerText = node.info || "Nessuna informazione disponibile...";
-        infoPanel.classList.add('visible');
+      nodeTitle.innerText = node.label;
+      nodeDesc.innerText = node.info || 'Nessuna informazione disponibile...';
+      infoPanel.classList.add('visible');
     }
   };
 
-  graph.onNodeClick(flyToNode);
+  graph.onNodeClick((n) => flyToNode(n as KGNode));
+  closeBtn?.addEventListener('click', () => infoPanel?.classList.remove('visible'));
 
-  if (closeBtn && infoPanel) {
-    closeBtn.addEventListener('click', () => {
-        infoPanel.classList.remove('visible');
-    });
-  }
-
-  // 3. SINCRONIZZAZIONE DATI E CLUSTER
+  let lastLinkCount = -1;
   const refreshGraph = async () => {
     const nodes = await db.nodes.toArray();
     const links = await db.links.toArray();
-    
-    // Calcoliamo quante connessioni ha ogni nodo per ingrandirlo
-    nodes.forEach((n: any) => {
-       n.degree = links.filter(l => l.source === n.id || l.target === n.id).length;
+    nodes.forEach((n) => {
+      n.degree = links.filter((l) => l.source === n.id || l.target === n.id).length;
     });
-
-    // Assegniamo i colori intelligenti
-    assignClusters(nodes, links);
+    if (links.length !== lastLinkCount) {
+      assignClusters(nodes, links);
+      lastLinkCount = links.length;
+    }
     graph.graphData({ nodes, links });
   };
 
-  // 4. LOGICA DELL'APPLICAZIONE (LE AZIONI DELL'UTENTE)
-  
-  // A. Aggiunta Nodo e IA
   const handleAddNode = async (term: string) => {
     const newNode: KGNode = {
-      id: term,
-      label: term,
+      id: term, label: term,
       info: "⏳ L'IA sta comprendendo l'argomento...",
-      color: '#ffffff', // Colore temporaneo neutro
-      createdAt: Date.now()
+      color: '#ffffff', createdAt: Date.now(),
     };
-
     try {
-      // Usiamo safeAddNode per gestire elegantemente i duplicati
-      await safeAddNode(async () => {
-        await db.nodes.add(newNode);
-      });
+      await safeAddNode(async () => { await db.nodes.add(newNode); });
       await refreshGraph();
 
-      // Inseriamo il lavoro IA in coda per evitare blocchi
       enqueue(async () => {
-        // 1. Troviamo il significato spaziale (Embedding)
-        const embedding = await embed(term);
-        if (embedding) {
-          await db.nodes.update(term, { embedding });
-          
-          // 2. Creiamo i collegamenti semantici automatici (Auto-Link)
-          await autoLink(term, embedding);
-          await refreshGraph(); // Vedrai le linee apparire da sole!
-        }
+        try {
+          const { vector, model } = await embed(term);
+          await db.nodes.update(term, { embedding: vector, embeddingModel: model });
+          await autoLink(term, vector, model);
+          await refreshGraph();
 
-        // 3. Generiamo la definizione in Streaming
-        let fullText = "";
-        for await (const chunk of streamDefinition(term)) {
-          fullText += chunk;
-          await db.nodes.update(term, { info: fullText });
-          // Effetto live writing se hai il pannello aperto
-          if (nodeTitle?.innerText === term) {
-              nodeDesc!.innerText = fullText;
+          let fullText = '';
+          for await (const chunk of streamDefinition(term)) {
+            fullText += chunk;
+            if (nodeTitle?.innerText === term && nodeDesc) nodeDesc.innerText = fullText;
           }
+          await db.nodes.update(term, { info: fullText });
+          await refreshGraph();
+        } catch (e) {
+          console.error('AI fallita per', term, e);
+          await db.nodes.update(term, {
+            info: 'Definizione non disponibile (AI offline). Riprova quando Ollama e attivo.',
+          });
+          await refreshGraph();
         }
       });
-
-    } catch (error: any) {
-      if (error.message === 'DUPLICATE') {
-        alert(`Il termine "${term}" esiste già nel tuo Secondo Cervello!`);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'DUPLICATE') {
+        alert(`Il termine "${term}" esiste gia nel tuo Secondo Cervello!`);
       } else {
         console.error(error);
       }
     }
   };
 
-  // B. Motore di Ricerca
   const handleSearch = async (term: string) => {
     if (!term) return;
     const nodes = await db.nodes.toArray();
     const fuse = new Fuse(nodes, { keys: ['label'], threshold: 0.3 });
     const results = fuse.search(term);
-    
     if (results.length > 0) {
-        const targetId = results[0].item.id;
-        const graphNodes = graph.graphData().nodes as KGNode[];
-        const nodeInGraph = graphNodes.find((n: any) => n.id === targetId);
-        if (nodeInGraph) {
-            flyToNode(nodeInGraph);
-        }
+      const target = (graph.graphData().nodes as KGNode[]).find((n) => n.id === results[0].item.id);
+      if (target) flyToNode(target);
     }
   };
 
-  // C. Collegamento Manuale
   const handleAddLink = async (source: string, target: string) => {
-    try {
-      const s = await db.nodes.get(source);
-      const t = await db.nodes.get(target);
-      if (s && t) {
-        const newLink: KGLink = {
-          id: `${source}->${target}`,
-          source, target,
-          type: 'custom',
-          weight: 0.8,
-          origin: 'manual',
-          label: 'collegato a'
-        };
-        await db.links.add(newLink);
-        await refreshGraph();
-      } else {
-        alert("Controlla di aver scritto correttamente i nomi. I nodi devono esistere!");
-      }
-    } catch (e) { console.error(e); }
+    if (!source || !target || source === target) return;
+    const [s, t] = await Promise.all([db.nodes.get(source), db.nodes.get(target)]);
+    if (!s || !t) { alert('I nodi devono esistere! Controlla i nomi.'); return; }
+    const id = linkId(source, target);
+    if (await db.links.get(id)) { alert('Questi nodi sono gia collegati.'); return; }
+    await db.links.add({ id, source, target, type: 'custom', weight: 0.8, origin: 'manual', label: 'collegato a' });
+    await refreshGraph();
   };
 
-  // AVVIAMO L'APP
   initUI(handleAddNode, handleSearch, handleAddLink);
   refreshGraph();
 }

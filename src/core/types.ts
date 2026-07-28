@@ -1,14 +1,14 @@
-// src/core/types.ts
-
 export interface KGNode {
   id: string;
   label: string;
   info: string;
-  embedding?: number[]; // Le coordinate semantiche dell'IA
-  cluster?: number;     // Il gruppo di appartenenza per i colori
+  embedding?: number[];
+  embeddingModel?: string;   // es. 'nomic-embed-text' | 'minilm'
+  cluster?: number;
   color: string;
   createdAt: number;
-  x?: number; y?: number; z?: number; // Generati dal motore 3D
+  degree?: number;           // dichiarato, niente più any
+  x?: number; y?: number; z?: number;
 }
 
 export type RelationType =
@@ -20,7 +20,7 @@ export interface KGLink {
   source: string;
   target: string;
   type: RelationType;
-  weight: number; // Forza del legame (da 0 a 1)
+  weight: number; // 0..1
   origin: 'ai' | 'manual';
   label?: string;
 }
