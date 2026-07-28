@@ -20,6 +20,8 @@
     "3d-force-graph": "^1.80.0",
     "dexie": "^4.4.4",
     "fuse.js": "^7.5.0",
+    "graphology": "^0.26.0",
+    "graphology-communities-louvain": "^2.0.2",
     "postprocessing": "^6.39.4",
     "three": "^0.185.1",
     "tweakpane": "^4.0.5"
