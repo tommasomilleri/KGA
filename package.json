@@ -22,7 +22,7 @@
     "fuse.js": "^7.5.0",
     "graphology": "^0.26.0",
     "graphology-communities-louvain": "^2.0.2",
-    "postprocessing": "^6.39.4",
+    "lint": "eslint src",
     "three": "^0.185.1",
     "tweakpane": "^4.0.5"
   }

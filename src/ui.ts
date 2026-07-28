@@ -34,11 +34,16 @@ export function initUI(
     onAddLink(PARAMS.linkFrom.trim(), PARAMS.linkTo.trim()),
   );
 
-  // --- Soglia configurabile ---
+  // --- Impostazioni AI & Modello ---
   const aiFolder = pane.addFolder({ title: 'Impostazioni AI' });
   aiFolder
     .addBinding(PARAMS, 'threshold', { label: 'Soglia similarita', min: 0.3, max: 0.9, step: 0.01 })
     .on('change', (ev) => setThreshold(ev.value));
+
+  const MODEL_PARAMS = { model: localStorage.getItem('kga-model') ?? 'llama3.1:8b' };
+  aiFolder
+    .addBinding(MODEL_PARAMS, 'model', { label: 'Modello Ollama' })
+    .on('change', (ev) => localStorage.setItem('kga-model', ev.value));
 
   // --- Backup ---
   const dataFolder = pane.addFolder({ title: 'Dati' });
@@ -56,7 +61,14 @@ export function initUI(
     input.accept = '.json';
     input.onchange = async () => {
       const file = input.files?.[0];
-      if (file) { await importJSON(await file.text()); location.reload(); }
+      if (file) {
+        try {
+          await importJSON(await file.text());
+          location.reload();
+        } catch (err) {
+          alert(err instanceof Error ? err.message : 'Import fallito.');
+        }
+      }
     };
     input.click();
   });

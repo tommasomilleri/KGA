@@ -6,6 +6,7 @@ import { safeAddNode } from './data/db-errors';
 import type { KGNode, KGLink } from './core/types';
 import { embed } from './ai/embeddings';
 import { autoLink, linkId } from './ai/similarity';
+import { classifyRelations } from './ai/relations';
 import { streamDefinition } from './ai/ollama';
 import { enqueue } from './ai/queue';
 import { assignClusters } from './graph/clusters';
@@ -54,7 +55,11 @@ if (container) {
   const refreshGraph = async () => {
     const nodes = await db.nodes.toArray();
     const links = await db.links.toArray();
+    // Preserva le posizioni correnti (evita il "salto" del layout a ogni refresh)
+    const current = new Map((graph.graphData().nodes as KGNode[]).map((n) => [n.id, n]));
     nodes.forEach((n) => {
+      const old = current.get(n.id);
+      if (old) { n.x = old.x; n.y = old.y; n.z = old.z; }
       n.degree = links.filter((l) => l.source === n.id || l.target === n.id).length;
     });
     if (links.length !== lastLinkCount) {
@@ -72,13 +77,21 @@ if (container) {
     };
     try {
       await safeAddNode(async () => { await db.nodes.add(newNode); });
+      invalidateSearchIndex();
       await refreshGraph();
 
       enqueue(async () => {
         try {
           const { vector, model } = await embed(term);
           await db.nodes.update(term, { embedding: vector, embeddingModel: model });
-          await autoLink(term, vector, model);
+          const newLinks = await autoLink(term, vector, model);
+          if (newLinks.length > 0) {
+            const pairs = newLinks.map((l) => [l.source, l.target] as [string, string]);
+            const rels = await classifyRelations(pairs).catch(() => []);
+            for (const r of rels) {
+              await db.links.update(linkId(r.da, r.a), { type: r.tipo, label: r.label });
+            }
+          }
           await refreshGraph();
 
           let fullText = '';
@@ -105,11 +118,16 @@ if (container) {
     }
   };
 
+  let fuseIndex: Fuse<KGNode> | null = null;
+  const invalidateSearchIndex = () => { fuseIndex = null; };
+
   const handleSearch = async (term: string) => {
     if (!term) return;
-    const nodes = await db.nodes.toArray();
-    const fuse = new Fuse(nodes, { keys: ['label'], threshold: 0.3 });
-    const results = fuse.search(term);
+    if (!fuseIndex) {
+      const nodes = await db.nodes.toArray();
+      fuseIndex = new Fuse(nodes, { keys: ['label'], threshold: 0.3 });
+    }
+    const results = fuseIndex.search(term);
     if (results.length > 0) {
       const target = (graph.graphData().nodes as KGNode[]).find((n) => n.id === results[0].item.id);
       if (target) flyToNode(target);
