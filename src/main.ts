@@ -11,10 +11,16 @@ import { streamDefinition } from './ai/ollama';
 import { enqueue } from './ai/queue';
 import { assignClusters } from './graph/clusters';
 import { createBloom, nodeObject } from './graph/effects';
-import { initUI } from './ui';
 import { highlight, computeNeighbors, computeNeighborhood } from './graph/highlight';
 import { summarizeCluster } from './ai/summarize';
-     import { createMinimap } from './graph/minimap';
+import { createMinimap } from './graph/minimap';
+
+import { initTerminal } from './ui/terminal';
+import { setThreshold } from './ai/similarity';
+import { renameNode } from './data/mutations';
+import { exportJSON } from './data/db';
+import { findHiddenLinks, applyProposals } from './ai/discovery';
+
 
 
 
@@ -89,6 +95,7 @@ if (container) {
       nodeDesc.innerText = node.info || 'Nessuna informazione disponibile...';
       infoPanel.classList.add('visible');
     }
+    if (visited[visited.length - 1] !== node.id) { visited.push(node.id); renderBreadcrumb(); }
   };
 
   graph.onNodeClick((n: any) => flyToNode(n as KGNode));
@@ -290,20 +297,47 @@ if (container) {
     graph.nodeThreeObject(graph.nodeThreeObject());
   });
 
-     createMinimap(
-       () => graph.graphData().nodes as KGNode[],
-       () => { const c = graph.cameraPosition(); return { x: c.x, z: c.z }; },
-       (x, z) => graph.cameraPosition({ x, y: 80, z: z + 120 }, { x, y: 0, z }, 1200),
-     );
+
+  createMinimap(
+    () => graph.graphData().nodes as KGNode[],
+    () => {
+      const c = graph.cameraPosition();
+      const t = graph.controls().target ?? { x: 0, z: 0 };
+      return { x: c.x, z: c.z, lookX: t.x, lookZ: t.z };
+    },
+    (node) => flyToNode(node),
+  );
 
 
-  initUI(
-    handleAddNode, 
-    handleSearch,
-     handleAddLink, 
-     handleDeleteNode,
-      handleRefresh,
-     () => { invalidateSearchIndex(); refreshGraph(); });
+
+
+  initTerminal({
+    addNode: handleAddNode,
+    search: handleSearch,
+    addLink: handleAddLink,
+    deleteNode: handleDeleteNode,
+    renameNode: async (o, n) => { await renameNode(o, n); invalidateSearchIndex(); await refreshGraph(); },
+    discover: async () => {
+      const proposals = await findHiddenLinks(10);
+      if (proposals.length === 0) { alert('Nessun collegamento nascosto.'); return; }
+      const summary = proposals.map((p) => `• ${p.source} ↔ ${p.target} (${Math.round(p.sim * 100)}%)`).join('\n');
+      if (confirm(`Trovati ${proposals.length}:\n\n${summary}\n\nAggiungerli?`)) {
+        await applyProposals(proposals);
+        await refreshGraph();
+      }
+    },
+    recalc: handleRefresh,
+    setThreshold,
+    setModel: (m) => localStorage.setItem('kga-model', m),
+    exportData: async () => {
+      const blob = new Blob([await exportJSON()], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `kga-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click(); URL.revokeObjectURL(a.href);
+    },
+  });
+
 
   refreshGraph();
 }

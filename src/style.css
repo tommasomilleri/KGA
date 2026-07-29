@@ -61,15 +61,20 @@
     left: 0; 
   } /* bottom-sheet */
 }
-#minimap {
-  position: fixed;
-  bottom: 16px;
-  right: 16px;
-  z-index: 20;
-  cursor: pointer;
-  opacity: 0.85;
-  transition: opacity 0.2s;
+
+#minimap-wrap {
+  position: fixed; bottom: 16px; right: 16px; z-index: 20;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
 }
+#minimap { cursor: crosshair; opacity: 0.88; transition: opacity .2s; }
+#minimap:hover { opacity: 1; }
+#minimap-toggle {
+  background: rgba(10,10,16,0.78); color: rgba(255,255,255,0.6);
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 6px;
+  width: 24px; height: 20px; font-size: 10px; cursor: pointer;
+}
+#minimap-toggle:hover { color: #fff; }
+@media (max-width: 600px) { #minimap-wrap { display: none; } }
 #minimap:hover { opacity: 1; }
 @media (max-width: 600px) { #minimap { display: none; } }
 #breadcrumb {
@@ -86,3 +91,32 @@
   #breadcrumb span { cursor: pointer; transition: color .2s; }
   #breadcrumb span:hover { color: #fff; }
   #breadcrumb span:not(:last-child)::after { content: ' \2190'; margin-left: 6px; }
+
+#cmdbar {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  width: min(560px, calc(100vw - 200px));
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(12,12,18,0.82);
+  backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 12px;
+  padding: 10px 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  z-index: 25;
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+}
+#cmd-prompt { color: #7AA2C6; font-weight: 600; font-size: 14px; }
+#cmd-input {
+  flex: 1; background: none; border: none; outline: none;
+  color: #eaeaf0; font: 400 14px inherit; letter-spacing: .01em;
+  caret-color: #7AA2C6;
+}
+#cmd-input::placeholder { color: rgba(255,255,255,0.25); }
+#cmd-hint {
+  position: absolute; bottom: calc(100% + 6px); left: 0; right: 0;
+  text-align: center; font-size: 11px; pointer-events: none;
+  transition: opacity .2s;
+}
+#cmdbar:focus-within { border-color: rgba(122,162,198,0.45); }
+@media (max-width: 600px) { #cmdbar { width: calc(100vw - 24px); bottom: 8px; } }
+
