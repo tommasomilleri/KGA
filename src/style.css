@@ -208,9 +208,12 @@ body::after {
   background: var(--bg-panel); backdrop-filter: blur(14px);
   border: 1px solid var(--border); border-radius: 8px;
   position: absolute; top: 42px; right: 0;
+  box-sizing: border-box; overflow: hidden;
 }
+
 #music-panel.open { display: block; }
 .mp-row { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+.mp-row > * {min-width: 0; }  /* per far funzionare flex:1 su input range e text */
 #mp-search { flex: 1; background: rgba(0,0,0,.4); border: 1px solid var(--border);
   border-radius: 4px; color: var(--text); padding: 6px 8px; outline: none; }
 #mp-frame iframe { border-radius: 6px; }
@@ -286,4 +289,25 @@ body.paper::after { background: none; }   /* niente scanline su carta */
 #mp-seek { flex: 2; accent-color: var(--accent); }
 .mp-keep { display: block; font-size: 9px; color: var(--dim); margin-top: 4px; }
 .mp-keep input { accent-color: var(--accent); }
+
+#mp-seek { width: 100%; accent-color: var(--accent); display: block;
+  margin: 4px 0; box-sizing: border-box; }
+#mp-vol { flex: 1; max-width: 80px; accent-color: var(--accent); }
+.mp-controls { flex-wrap: wrap; }
+#mp-frame { max-width: 100%; }
+#mp-frame iframe { max-width: 100%; border-radius: 6px; }
+#mp-q { flex: 1; background: rgba(0,0,0,.4); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text); padding: 6px 8px; outline: none;
+  box-sizing: border-box; }
+#mp-status { font-size: 10px; color: var(--dim); min-height: 14px; margin: 4px 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#mp-results { list-style: none; margin: 0 0 6px; padding: 0;
+  max-height: 150px; overflow-y: auto; }
+#mp-results li { display: flex; flex-direction: column; padding: 5px 6px;
+  cursor: pointer; border-radius: 4px; }
+#mp-results li:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+#mp-results li.playing { border-left: 2px solid var(--accent); }
+.mp-r-title { font-size: 11px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-r-author { font-size: 9px; color: var(--dim); }
 

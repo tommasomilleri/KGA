@@ -1,7 +1,14 @@
 
 const MB_API = 'https://musicbrainz.org/ws/2';
 const SERVER = 'http://localhost:7777';
-const INV = ['https://inv.nadeko.net', 'https://invidious.nerdvpn.de', 'https://yewtu.be'];
+
+const PIPED = [
+  'https://pipedapi.kavin.rocks',
+  'https://pipedapi.adminforge.de',
+  'https://api.piped.private.coffee',
+];
+const INVIDIOUS = ['https://inv.nadeko.net', 'https://invidious.nerdvpn.de', 'https://yewtu.be'];
+
 
 export interface Track { id: string; title: string; author: string }
 
@@ -42,8 +49,30 @@ async function searchMusicBrainz(q: string): Promise<MBRecording[]> {
 }
 
 // ---------- risolve "titolo artista" -> videoId YouTube ----------
+
 async function resolveVideoId(query: string): Promise<Track[]> {
-  for (const base of INV) {
+  // STRATO 1: Piped (CORS aperto, di solito il piu' affidabile)
+  for (const base of PIPED) {
+    try {
+      const r = await fetch(
+        `${base}/search?q=${encodeURIComponent(query)}&filter=videos`,
+        { signal: AbortSignal.timeout(5000) },
+      );
+      if (!r.ok) continue;
+      const data = await r.json();
+      const t: Track[] = (data.items ?? [])
+        .slice(0, 5)
+        .map((v: any) => ({
+          id: String(v.url ?? '').replace('/watch?v=', ''),
+          title: v.title ?? '?',
+          author: v.uploaderName ?? '?',
+        }))
+        .filter((x: Track) => /^[\w-]{11}$/.test(x.id));
+      if (t.length) return t;
+    } catch { /* istanza giu': prossima */ }
+  }
+  // STRATO 2: Invidious
+  for (const base of INVIDIOUS) {
     try {
       const r = await fetch(
         `${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video`,
@@ -51,13 +80,34 @@ async function resolveVideoId(query: string): Promise<Track[]> {
       );
       if (!r.ok) continue;
       const data = await r.json();
-      const t = (data as any[]).filter((v) => v.type === 'video').slice(0, 5)
+      const t: Track[] = (data as any[])
+        .filter((v) => v.type === 'video')
+        .slice(0, 5)
         .map((v) => ({ id: v.videoId, title: v.title, author: v.author }));
       if (t.length) return t;
-    } catch { /* prossima istanza */ }
+    } catch { /* prossima */ }
+  }
+  // STRATO 3: YouTube Data API ufficiale (se salvata con /ytkey — infallibile)
+  const key = localStorage.getItem('kga-yt-key');
+  if (key) {
+    try {
+      const r = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${key}`,
+        { signal: AbortSignal.timeout(6000) },
+      );
+      if (r.ok) {
+        const data = await r.json();
+        return (data.items ?? []).map((v: any) => ({
+          id: v.id.videoId,
+          title: v.snippet.title,
+          author: v.snippet.channelTitle,
+        }));
+      }
+    } catch { /* niente */ }
   }
   return [];
 }
+
 
 function parseVideoId(input: string): string | null {
   const m = input.trim().match(
@@ -233,7 +283,10 @@ export function initMusicPlayer(): void {
 
     queue = await resolveVideoId(searchQuery + ' official audio');
     if (!queue.length) queue = await resolveVideoId(searchQuery);
-    if (!queue.length) { setStatus('nessun risultato', true); return; }
+if (!queue.length) {
+      setStatus('ricerca offline — incolla un link YouTube o salva una key con /ytkey', true);
+      return;
+    }
     queueIdx = 0; renderResults(); playTrack(queue[0]);
   });
 

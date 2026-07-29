@@ -15,10 +15,12 @@ export interface TerminalActions {
   getNodeNames: () => string[];        // <-- NUOVO: per l'autocomplete sui nodi
 }
 
+
 const COMMANDS = [
   '/cerca', '/collega', '/elimina', '/rinomina', '/scopri',
-  '/ricalcola', '/soglia', '/modello', '/esporta', '/aiuto', '/font',
+  '/ricalcola', '/soglia', '/modello', '/esporta', '/aiuto', '/font', '/ytkey',
 ];
+
 
 // comandi che accettano un NOME DI NODO come argomento
 const NODE_ARG_COMMANDS = new Set(['/cerca', '/elimina', '/collega', '/rinomina']);
@@ -121,6 +123,13 @@ export function initTerminal(actions: TerminalActions): void {
       case '/modello': actions.setModel(arg); flash(`modello = ${arg}`); break;
       case '/esporta': actions.exportData(); flash('backup scaricato'); break;
       case '/font': document.dispatchEvent(new CustomEvent('kga:fontlab')); break;
+
+      case '/ytkey':
+        if (arg) { localStorage.setItem('kga-yt-key', arg); flash('YouTube API key salvata'); }
+        else flash('uso: /ytkey LA_TUA_KEY', false);
+        break;
+
+
       case '/aiuto': flash(COMMANDS.join('  ')); break;
       default: flash(`comando sconosciuto: ${cmd}`, false);
     }
