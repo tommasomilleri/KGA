@@ -16,12 +16,12 @@
     "fuse.js": "^7.0.0",
     "graphology": "^0.25.4",
     "graphology-communities-louvain": "^2.0.1",
-    "three": "^0.166.1",
+    "three": "^0.185.1",
     "tweakpane": "^4.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/three": "^0.166.0",
+    "@types/three": "^0.185.1",
     "eslint": "^10.8.0",
     "typescript": "^5.2.2",
     "typescript-eslint": "^8.65.0",
