@@ -36,17 +36,6 @@ export function initTerminal(actions: TerminalActions): void {
   };
 
 
-  // fuzzy: prima prefisso esatto, poi Fuse
-  const fuzzyBest = (partial: string): string | null => {
-    const names = actions.getNodeNames();
-    const lower = partial.toLowerCase();
-    const prefix = names.find((n) => n.toLowerCase().startsWith(lower));
-    if (prefix) return prefix;
-    const fuse = new Fuse(names, { threshold: 0.35 });
-    const res = fuse.search(partial);
-    return res.length > 0 ? res[0].item : null;
-  };
-
   // ghost text: mostra la parte mancante in grigio dopo il testo digitato
   let items: string[] = [];
   let selected = -1;

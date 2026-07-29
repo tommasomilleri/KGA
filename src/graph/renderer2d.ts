@@ -7,7 +7,7 @@ export function createGraph2D(
   onNodeClick: (n: KGNode) => void,
   onNodeHover: (n: KGNode | null) => void,
 ) {
-  const g = ForceGraph2D()(container)
+  const g = new ForceGraph2D(container)
     .backgroundColor('#FAF6EE')                       // bianco panna
     .nodeCanvasObject((node: any, ctx, scale) => {
       const r = 3 + Math.min((node.degree ?? 0) * 0.8, 7);
