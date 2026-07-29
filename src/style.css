@@ -1,122 +1,179 @@
-/* Stile della scheda informativa */
+
+:root {
+  --ui-font: ui-monospace, 'Cascadia Code', Menlo, monospace;
+  --ui-size: 14px;
+  --ui-spacing: 0.02em;
+  --accent: #00ff66;              /* verde Matrix; cambialo dal Font Lab */
+  --glow: 0.5;
+  --bg-panel: rgba(3, 10, 5, 0.88);
+  --border: color-mix(in srgb, var(--accent) 25%, transparent);
+  --text: color-mix(in srgb, var(--accent) 85%, white);
+  --dim: color-mix(in srgb, var(--accent) 40%, transparent);
+  --ok: #00ff66;
+  --err: #ff5555;
+}
+
+* { font-family: var(--ui-font); letter-spacing: var(--ui-spacing); }
+body { margin: 0; background: #010401; overflow: hidden; }
+
+/* scanline CRT sottile su tutta la UI (solo estetica, no interazione) */
+body::after {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 100;
+  background: repeating-linear-gradient(0deg,
+    transparent 0 2px, rgba(0, 255, 102, 0.012) 2px 4px);
+}
+
+/* ============ SCHEDA INFORMATIVA (vedi F4 per la struttura) ============ */
 #info-panel {
-  position: absolute;
-  top: 0;
-  left: -400px; /* Nascosta fuori dallo schermo a sinistra */
-  width: 350px;
-  height: 100vh;
-  background-color: rgba(15, 15, 25, 0.85); /* Sfondo scuro semi-trasparente */
-  backdrop-filter: blur(10px); /* Effetto vetro sfocato */
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  transition: left 0.3s ease;
-  padding: 30px;
-  box-sizing: border-box;
-  z-index: 10;
-  color: white;
+  position: absolute; top: 0; left: -420px;
+  width: 370px; height: 100vh;
+  background: var(--bg-panel);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid var(--border);
+  box-shadow: 0 0 calc(var(--glow) * 40px) color-mix(in srgb, var(--accent) 15%, transparent);
+  transition: left 0.25s ease;
+  padding: 24px; box-sizing: border-box; z-index: 10;
+  color: var(--text); font-size: var(--ui-size);
 }
-
-#info-panel.visible {
-  left: 0; /* Appare scorrendo da sinistra */
+#info-panel.visible { left: 0; }
+#info-panel::before {           /* header stile finestra cmd */
+  content: 'C:\\KGA\\node_info.exe';
+  display: block; font-size: 10px; color: var(--dim);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px; margin-bottom: 14px;
 }
-
 #close-btn {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 28px;
-  cursor: pointer;
-  float: right;
-  transition: color 0.2s;
+  background: none; border: 1px solid var(--border); border-radius: 3px;
+  color: var(--dim); font-size: 14px; width: 24px; height: 24px;
+  cursor: pointer; float: right; transition: all .2s;
 }
-
-#close-btn:hover {
-  color: #e24a4a;
-}
-
+#close-btn:hover { color: var(--err); border-color: var(--err); }
 #node-title {
-  margin-top: 40px;
-  border-bottom: 2px solid #7AA2C6;
-  padding-bottom: 10px;
-  font-size: 24px;
+  margin: 8px 0 4px; font-size: calc(var(--ui-size) + 6px);
+  color: var(--accent);
+  text-shadow: 0 0 calc(var(--glow) * 12px) var(--accent);
+}
+#node-title::before { content: '> '; }
+#node-description { line-height: 1.65; color: var(--text); opacity: .85; }
+
+/* sezione collegamenti (F4) */
+#node-links { margin-top: 18px; }
+#node-links h3 {
+  font-size: 11px; color: var(--dim); text-transform: uppercase;
+  border-bottom: 1px dashed var(--border); padding-bottom: 4px;
+}
+.link-row {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 4px 0; cursor: pointer; transition: all .15s;
+  font-size: calc(var(--ui-size) - 1px);
+}
+.link-row:hover { padding-left: 6px; }
+.link-row:hover .link-target { color: var(--accent); }
+.link-rel { color: var(--dim); font-size: 10px; min-width: 92px; }
+.link-target { color: var(--text); }
+.link-weight { margin-left: auto; color: var(--dim); font-size: 10px; }
+
+/* ============ COMMAND BAR ============ */
+#cmdbar {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  width: min(580px, calc(100vw - 220px));
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-panel);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  box-shadow: 0 0 calc(var(--glow) * 24px) color-mix(in srgb, var(--accent) 12%, transparent);
+  z-index: 25;
+}
+#cmd-prompt { color: var(--accent); font-weight: 700; }
+#cmd-field { position: relative; flex: 1; }
+#cmd-ghost {
+  position: absolute; inset: 0; pointer-events: none;
+  color: var(--dim); font-size: var(--ui-size); line-height: 1.4;
+  white-space: pre; overflow: hidden;
+}
+#cmd-input {
+  position: relative; width: 100%;
+  background: none; border: none; outline: none;
+  color: var(--text); font-size: var(--ui-size); line-height: 1.4;
+  caret-color: var(--accent);
+}
+#cmd-input::placeholder { color: var(--dim); }
+#cmd-hint {
+  position: absolute; bottom: calc(100% + 8px); left: 0; right: 0;
+  text-align: center; font-size: 11px; pointer-events: none;
+}
+#cmdbar:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 calc(var(--glow) * 32px) color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
-#node-description {
-  line-height: 1.6;
-  color: #cccccc;
-  font-size: 15px;
-}
-@media (max-width: 600px) {
-  #info-panel {
-    width: 100%;
-    height: 45vh;
-    top: auto;
-    bottom: -50vh;   /* nascosto sotto */
-    left: 0;
-    border-right: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    transition: bottom 0.3s ease;
-  }
-  #info-panel.visible { 
-    bottom: 0; 
-    left: 0; 
-  } /* bottom-sheet */
-}
+/* cursore a blocco lampeggiante (effetto cmd) quando l'input e' in focus */
+#cmd-input:focus { animation: none; }
+@keyframes blink { 50% { opacity: 0; } }
 
+/* ============ BREADCRUMB ============ */
+#breadcrumb {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 15; display: flex; gap: 6px;
+  font-size: 11px; color: var(--dim);
+}
+#breadcrumb span { cursor: pointer; transition: color .2s; }
+#breadcrumb span:hover { color: var(--accent); }
+#breadcrumb span:not(:last-child)::after { content: ' <'; margin-left: 6px; }
+
+/* ============ MINIMAPPA ============ */
 #minimap-wrap {
   position: fixed; bottom: 16px; right: 16px; z-index: 20;
   display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
 }
-#minimap { cursor: crosshair; opacity: 0.88; transition: opacity .2s; }
+#minimap { cursor: crosshair; opacity: .88; transition: opacity .2s;
+  border: 1px solid var(--border); border-radius: 10px; }
 #minimap:hover { opacity: 1; }
 #minimap-toggle {
-  background: rgba(10,10,16,0.78); color: rgba(255,255,255,0.6);
-  border: 1px solid rgba(255,255,255,0.1); border-radius: 6px;
+  background: var(--bg-panel); color: var(--dim);
+  border: 1px solid var(--border); border-radius: 4px;
   width: 24px; height: 20px; font-size: 10px; cursor: pointer;
 }
-#minimap-toggle:hover { color: #fff; }
-@media (max-width: 600px) { #minimap-wrap { display: none; } }
-#minimap:hover { opacity: 1; }
-@media (max-width: 600px) { #minimap { display: none; } }
-#breadcrumb {
-    position: fixed;
-    top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 15;
-    display: flex;
-    gap: 6px;
-    font: 500 12px Inter, sans-serif;
-    color: rgba(255,255,255,0.5);
-  }
-  #breadcrumb span { cursor: pointer; transition: color .2s; }
-  #breadcrumb span:hover { color: #fff; }
-  #breadcrumb span:not(:last-child)::after { content: ' \2190'; margin-left: 6px; }
+#minimap-toggle:hover { color: var(--accent); }
 
-#cmdbar {
-  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-  width: min(560px, calc(100vw - 200px));
-  display: flex; align-items: center; gap: 10px;
-  background: rgba(12,12,18,0.82);
-  backdrop-filter: blur(16px) saturate(1.4);
-  border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 12px;
-  padding: 10px 16px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
-  z-index: 25;
-  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+/* ============ FONT LAB ============ */
+#fontlab {
+  position: fixed; top: 50%; right: -320px; transform: translateY(-50%);
+  width: 280px; z-index: 30;
+  background: var(--bg-panel); backdrop-filter: blur(14px);
+  border: 1px solid var(--border); border-radius: 8px 0 0 8px;
+  padding: 16px; color: var(--text); font-size: 12px;
+  transition: right .25s ease;
 }
-#cmd-prompt { color: #7AA2C6; font-weight: 600; font-size: 14px; }
-#cmd-input {
-  flex: 1; background: none; border: none; outline: none;
-  color: #eaeaf0; font: 400 14px inherit; letter-spacing: .01em;
-  caret-color: #7AA2C6;
+#fontlab.open { right: 0; }
+#fontlab .fl-title {
+  display: flex; justify-content: space-between; align-items: center;
+  color: var(--accent); font-weight: 700; margin-bottom: 12px;
 }
-#cmd-input::placeholder { color: rgba(255,255,255,0.25); }
-#cmd-hint {
-  position: absolute; bottom: calc(100% + 6px); left: 0; right: 0;
-  text-align: center; font-size: 11px; pointer-events: none;
-  transition: opacity .2s;
+#fontlab label { display: block; margin: 10px 0 4px; color: var(--dim); }
+#fontlab select, #fontlab input[type=range], #fontlab input[type=color] {
+  width: 100%; background: rgba(0,0,0,.4); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; padding: 4px;
+  accent-color: var(--accent);
 }
-#cmdbar:focus-within { border-color: rgba(122,162,198,0.45); }
-@media (max-width: 600px) { #cmdbar { width: calc(100vw - 24px); bottom: 8px; } }
+#fontlab .fl-preview {
+  margin-top: 14px; padding: 10px; border: 1px dashed var(--border);
+  border-radius: 4px; color: var(--accent); font-size: var(--ui-size);
+}
+#fontlab button {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--dim); cursor: pointer; padding: 4px 10px; margin-top: 12px;
+}
+#fontlab button:hover { color: var(--accent); border-color: var(--accent); }
+
+@media (max-width: 600px) {
+  #info-panel { width: 100%; height: 50vh; top: auto; bottom: -55vh; left: 0;
+    border-right: none; border-top: 1px solid var(--border);
+    transition: bottom .25s ease; }
+  #info-panel.visible { bottom: 0; left: 0; }
+  #cmdbar { width: calc(100vw - 24px); bottom: 8px; }
+  #minimap-wrap { display: none; }
+}
 

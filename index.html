@@ -10,16 +10,29 @@
 <body>
   <div id="app"></div>
   <div id="breadcrumb"></div>
+
   <div id="info-panel" class="hidden">
-    <button id="close-btn">&times;</button>
-    <h2 id="node-title">Titolo Termine</h2>
-    <p id="node-description">Descrizione del termine...</p>
+    <button id="close-btn">✕</button>
+    <h2 id="node-title">Titolo</h2>
+    <p id="node-description">…</p>
+    <div id="node-links">
+      <h3>Collegamenti</h3>
+      <div id="node-links-list"></div>
+    </div>
   </div>
+
+
   <div id="cmdbar">
-    <span id="cmd-prompt">❯</span>
-    <input id="cmd-input" type="text" spellcheck="false" placeholder="aggiungi un concetto… (/ per i comandi)" />
+    <span id="cmd-prompt">&gt;</span>
+    <div id="cmd-field">
+      <div id="cmd-ghost"></div>
+      <input id="cmd-input" type="text" spellcheck="false" autocomplete="off"
+        placeholder="aggiungi un concetto… (/ per i comandi, TAB completa)" />
+    </div>
     <div id="cmd-hint"></div>
   </div>
+
+
 
   <script type="module" src="/src/main.ts"></script>
 </body>

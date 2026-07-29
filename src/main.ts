@@ -14,7 +14,7 @@ import { createBloom, nodeObject } from './graph/effects';
 import { highlight, computeNeighbors, computeNeighborhood } from './graph/highlight';
 import { summarizeCluster } from './ai/summarize';
 import { createMinimap } from './graph/minimap';
-
+import { initFontLab } from './ui/fontlab';
 import { initTerminal } from './ui/terminal';
 import { setThreshold } from './ai/similarity';
 import { renameNode } from './data/mutations';
@@ -81,6 +81,40 @@ if (container) {
   const nodeDesc = document.getElementById('node-description');
   const closeBtn = document.getElementById('close-btn');
 
+  const renderNodeLinks = (nodeId: string) => {
+    const list = document.getElementById('node-links-list');
+    if (!list) return;
+    const links = (graph.graphData().links as KGLink[]).filter((l) => {
+      const src = typeof l.source === 'object' ? (l.source as unknown as KGNode).id : l.source;
+      const tgt = typeof l.target === 'object' ? (l.target as unknown as KGNode).id : l.target;
+      return src === nodeId || tgt === nodeId;
+    });
+    list.innerHTML = '';
+    if (links.length === 0) {
+      list.innerHTML = '<div class="link-row"><span class="link-rel">nessuno</span></div>';
+      return;
+    }
+    // ordina per peso decrescente: i collegamenti piu' forti in alto
+    links.sort((a, b) => b.weight - a.weight);
+    for (const l of links) {
+      const src = typeof l.source === 'object' ? (l.source as unknown as KGNode).id : l.source;
+      const tgt = typeof l.target === 'object' ? (l.target as unknown as KGNode).id : l.target;
+      const other = src === nodeId ? tgt : src;
+      const row = document.createElement('div');
+      row.className = 'link-row';
+      row.innerHTML = `
+        <span class="link-rel">${l.label ?? l.type}</span>
+        <span class="link-target">${other}</span>
+        <span class="link-weight">${Math.round(l.weight * 100)}%</span>`;
+      // click sul collegamento = vola al nodo collegato
+      row.onclick = () => {
+        const target = (graph.graphData().nodes as KGNode[]).find((n) => n.id === other);
+        if (target) flyToNode(target);
+      };
+      list.appendChild(row);
+    }
+  };
+
   const flyToNode = (node: KGNode) => {
     const x = node.x ?? 0, y = node.y ?? 0, z = node.z ?? 0;
     const dist = Math.hypot(x, y, z);
@@ -94,6 +128,8 @@ if (container) {
       nodeTitle.innerText = node.label;
       nodeDesc.innerText = node.info || 'Nessuna informazione disponibile...';
       infoPanel.classList.add('visible');
+      renderNodeLinks(node.id);
+
     }
     if (visited[visited.length - 1] !== node.id) { visited.push(node.id); renderBreadcrumb(); }
   };
@@ -313,6 +349,8 @@ if (container) {
 
   initTerminal({
     addNode: handleAddNode,
+
+    getNodeNames: () => (graph.graphData().nodes as KGNode[]).map((n) => n.label),
     search: handleSearch,
     addLink: handleAddLink,
     deleteNode: handleDeleteNode,
@@ -338,6 +376,7 @@ if (container) {
     },
   });
 
+  initFontLab();
 
   refreshGraph();
 }
