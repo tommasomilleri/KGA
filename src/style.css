@@ -278,3 +278,12 @@ body.paper::after { background: none; }   /* niente scanline su carta */
 .mp-fav-name:hover { color: var(--accent); }
 .mp-fav-del { color: var(--dim); cursor: pointer; }
 .mp-fav-del:hover { color: var(--err); }
+
+
+#mp-server-badge { font-size: 9px; margin: 2px 0; }
+.mp-on  { color: var(--ok); }
+.mp-off { color: var(--dim); }
+#mp-seek { flex: 2; accent-color: var(--accent); }
+.mp-keep { display: block; font-size: 9px; color: var(--dim); margin-top: 4px; }
+.mp-keep input { accent-color: var(--accent); }
+

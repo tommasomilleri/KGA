@@ -1,23 +1,82 @@
-let player: any = null;
-let apiReady = false;
 
+const MB_API = 'https://musicbrainz.org/ws/2';
+const SERVER = 'http://localhost:7777';
+const INV = ['https://inv.nadeko.net', 'https://invidious.nerdvpn.de', 'https://yewtu.be'];
+
+export interface Track { id: string; title: string; author: string }
+
+// ---------- rilevamento server locale ----------
+let serverOnline = false;
+async function checkServer(): Promise<boolean> {
+  try {
+    const r = await fetch(`${SERVER}/health`, { signal: AbortSignal.timeout(1200) });
+    serverOnline = r.ok;
+  } catch { serverOnline = false; }
+  return serverOnline;
+}
+
+// ---------- RICERCA ALTO LIVELLO: MusicBrainz (nome/artista) ----------
+interface MBRecording { title: string; artist: string }
+async function searchMusicBrainz(q: string): Promise<MBRecording[]> {
+  try {
+    const r = await fetch(
+      `${MB_API}/recording?query=${encodeURIComponent(q)}&fmt=json&limit=8`,
+      { headers: { 'User-Agent': 'KGA/1.0 (knowledge graph app)' },
+        signal: AbortSignal.timeout(6000) },
+    );
+    if (!r.ok) return [];
+    const data = await r.json();
+    const seen = new Set<string>();
+    return (data.recordings ?? [])
+      .map((rec: any) => ({
+        title: rec.title,
+        artist: rec['artist-credit']?.[0]?.name ?? '?',
+      }))
+      .filter((t: MBRecording) => {
+        const k = `${t.title}::${t.artist}`.toLowerCase();
+        if (seen.has(k)) return false;
+        seen.add(k); return true;
+      })
+      .slice(0, 6);
+  } catch { return []; }
+}
+
+// ---------- risolve "titolo artista" -> videoId YouTube ----------
+async function resolveVideoId(query: string): Promise<Track[]> {
+  for (const base of INV) {
+    try {
+      const r = await fetch(
+        `${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video`,
+        { signal: AbortSignal.timeout(5000) },
+      );
+      if (!r.ok) continue;
+      const data = await r.json();
+      const t = (data as any[]).filter((v) => v.type === 'video').slice(0, 5)
+        .map((v) => ({ id: v.videoId, title: v.title, author: v.author }));
+      if (t.length) return t;
+    } catch { /* prossima istanza */ }
+  }
+  return [];
+}
+
+function parseVideoId(input: string): string | null {
+  const m = input.trim().match(
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{11})/,
+  ) || input.trim().match(/^([\w-]{11})$/);
+  return m ? m[1] : null;
+}
+
+// ---------- YouTube IFrame (fallback) ----------
+let ytPlayer: any = null;
+let apiReady = false;
 function loadYTApi(): Promise<void> {
-  return new Promise((resolve) => {
-    if (apiReady) return resolve();
+  return new Promise((res) => {
+    if (apiReady) return res();
     const s = document.createElement('script');
     s.src = 'https://www.youtube.com/iframe_api';
     document.head.appendChild(s);
-    (window as any).onYouTubeIframeAPIReady = () => { apiReady = true; resolve(); };
+    (window as any).onYouTubeIframeAPIReady = () => { apiReady = true; res(); };
   });
-}
-
-// Estrae l'ID video da qualsiasi formato: URL completo, short, o ID nudo
-function parseVideoId(input: string): string | null {
-  const s = input.trim();
-  const m =
-    s.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{11})/) ||
-    s.match(/^([\w-]{11})$/);
-  return m ? m[1] : null;
 }
 
 export function initMusicPlayer(): void {
@@ -27,65 +86,184 @@ export function initMusicPlayer(): void {
     <button id="music-toggle" title="Musica">♪</button>
     <div id="music-panel">
       <div class="mp-row">
-        <input id="mp-url" type="text"
-          placeholder="incolla link YouTube + INVIO" />
+        <input id="mp-q" type="text" placeholder="brano, artista o link… + INVIO" />
       </div>
-      <div class="mp-hint">oppure cerca su
-        <a id="mp-yt-link" href="https://www.youtube.com" target="_blank">YouTube ↗</a>
-        e incolla il link qui</div>
+      <div id="mp-server-badge"></div>
+      <div id="mp-status"></div>
+      <ul id="mp-results"></ul>
+      <audio id="mp-audio" style="display:none"></audio>
       <div id="mp-frame"></div>
       <div class="mp-row mp-controls">
-        <button id="mp-play" title="Play/Pausa">⏯</button>
-        <input id="mp-vol" type="range" min="0" max="100" value="60" title="Volume" />
-        <button id="mp-fav" title="Salva nei preferiti">★</button>
+        <button id="mp-play">⏯</button>
+        <button id="mp-next">⏭</button>
+        <input id="mp-seek" type="range" min="0" max="100" value="0" />
+        <input id="mp-vol" type="range" min="0" max="100" value="60" />
+        <button id="mp-fav">★</button>
       </div>
+      <label class="mp-keep"><input id="mp-keep" type="checkbox">
+        salva su PC (altrimenti file eliminato a fine ascolto)</label>
       <div id="mp-favs"></div>
     </div>`;
   document.body.appendChild(wrap);
 
-  const panel = document.getElementById('music-panel')!;
-  const toggleBtn = document.getElementById('music-toggle')!;
-  toggleBtn.onclick = () => panel.classList.toggle('open');
+  const $ = (id: string) => document.getElementById(id)!;
+  const panel = $('music-panel');
+  $('music-toggle').onclick = () => panel.classList.toggle('open');
 
-  const urlInput = document.getElementById('mp-url') as HTMLInputElement;
-  let currentId: string | null = null;
+  const q = $('mp-q') as HTMLInputElement;
+  const audio = $('mp-audio') as HTMLAudioElement;
+  const seek = $('mp-seek') as HTMLInputElement;
+  const keepBox = $('mp-keep') as HTMLInputElement;
+  const badge = $('mp-server-badge');
+  const status = $('mp-status');
+  const resultsEl = $('mp-results') as HTMLUListElement;
 
-  const loadVideo = async (videoId: string) => {
-    currentId = videoId;
+  let queue: Track[] = [];
+  let queueIdx = -1;
+  let current: Track | null = null;
+  let currentJob: string | null = null;
+  let usingAudio = false;
+
+  const setStatus = (m: string, err = false) => {
+    status.textContent = m;
+    status.style.color = err ? 'var(--err)' : 'var(--dim)';
+  };
+
+  // badge stato server (ricontrolla ogni 30s)
+  const refreshBadge = async () => {
+    await checkServer();
+    badge.innerHTML = serverOnline
+      ? '<span class="mp-on">● yt-dlp attivo — audio HQ</span>'
+      : '<span class="mp-off">○ server spento — modalità YouTube</span>';
+    keepBox.parentElement!.style.display = serverOnline ? 'block' : 'none';
+  };
+  refreshBadge();
+  setInterval(refreshBadge, 30000);
+
+  // ---------- PLAYBACK ----------
+  const stopAll = () => {
+    audio.pause(); audio.removeAttribute('src'); audio.load();
+    ytPlayer?.stopVideo?.();
+    if (currentJob) { fetch(`${SERVER}/done/${currentJob}`, { method: 'POST' }).catch(() => {}); currentJob = null; }
+  };
+
+  const playViaServer = async (track: Track): Promise<boolean> => {
+    setStatus(`⬇ yt-dlp: ${track.title}…`);
+    try {
+      const r = await fetch(`${SERVER}/download`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId: track.id, title: `${track.title} - ${track.author}`,
+                               mode: keepBox.checked ? 'keep' : 'temp' }),
+      });
+      const { jobId } = await r.json();
+      // polling fino a ready (max 90s)
+      for (let i = 0; i < 90; i++) {
+        await new Promise((res) => setTimeout(res, 1000));
+        const st = await (await fetch(`${SERVER}/status/${jobId}`)).json();
+        if (st.status === 'ready') {
+          currentJob = jobId;
+          audio.src = `${SERVER}/stream/${jobId}`;
+          await audio.play();
+          usingAudio = true;
+          setStatus(`▶ ${track.title} — ${track.author}` + (keepBox.checked ? ' (salvato)' : ''));
+          return true;
+        }
+        if (st.status === 'error') { setStatus(`yt-dlp: ${st.error}`, true); return false; }
+        setStatus(`⬇ download… ${i}s`);
+      }
+    } catch { /* server caduto a metà */ }
+    return false;
+  };
+
+  const playViaYouTube = async (track: Track) => {
+    usingAudio = false;
     await loadYTApi();
     const YT = (window as any).YT;
-    if (!player) {
-      player = new YT.Player('mp-frame', {
-        height: '158', width: '272',
-        videoId,
-        playerVars: { autoplay: 1 },
-        events: { onReady: (e: any) => e.target.playVideo() },
+    if (!ytPlayer) {
+      ytPlayer = new YT.Player('mp-frame', {
+        height: '158', width: '272', videoId: track.id,
+        playerVars: { autoplay: 1, origin: window.location.origin, playsinline: 1 },
+        events: {
+          onError: () => { setStatus('✕ embedding bloccato, salto…', true); nextTrack(); },
+          onReady: (e: any) => e.target.playVideo(),
+        },
       });
-    } else {
-      player.loadVideoById(videoId);
-    }
+    } else ytPlayer.loadVideoById(track.id);
+    setStatus(`▶ (YouTube) ${track.title} — ${track.author}`);
   };
 
-  urlInput.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return;
-    const id = parseVideoId(urlInput.value);
-    if (!id) { urlInput.value = ''; urlInput.placeholder = 'link non valido, riprova'; return; }
-    loadVideo(id);
-    urlInput.value = '';
-    urlInput.placeholder = 'incolla link YouTube + INVIO';
+  const playTrack = async (track: Track) => {
+    stopAll();
+    current = track;
+    renderResults();
+    if (serverOnline && (await playViaServer(track))) return;
+    await playViaYouTube(track);         // fallback trasparente
+  };
+
+  const nextTrack = () => {
+    if (queueIdx < queue.length - 1) { queueIdx++; playTrack(queue[queueIdx]); }
+    else setStatus('coda terminata');
+  };
+
+  // fine brano: notifica il server (cancella se temp) e passa al prossimo
+  audio.onended = () => { stopAll(); nextTrack(); };
+  audio.ontimeupdate = () => {
+    if (audio.duration) seek.value = String((audio.currentTime / audio.duration) * 100);
+  };
+  seek.oninput = () => {
+    if (usingAudio && audio.duration) audio.currentTime = (Number(seek.value) / 100) * audio.duration;
+    else if (ytPlayer?.getDuration) ytPlayer.seekTo((Number(seek.value) / 100) * ytPlayer.getDuration(), true);
+  };
+
+  // ---------- RICERCA UNIFICATA ----------
+  q.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter' || !q.value.trim()) return;
+    const raw = q.value.trim(); q.value = '';
+
+    const direct = parseVideoId(raw);
+    if (direct) {                                        // basso livello: link
+      queue = [{ id: direct, title: raw, author: 'link' }]; queueIdx = 0;
+      renderResults(); playTrack(queue[0]); return;
+    }
+
+    setStatus(`♪ MusicBrainz: "${raw}"…`);               // alto livello
+    const mb = await searchMusicBrainz(raw);
+    const searchQuery = mb.length ? `${mb[0].artist} ${mb[0].title}` : raw;
+    if (mb.length) setStatus(`→ ${mb[0].artist} – ${mb[0].title}, cerco il video…`);
+
+    queue = await resolveVideoId(searchQuery + ' official audio');
+    if (!queue.length) queue = await resolveVideoId(searchQuery);
+    if (!queue.length) { setStatus('nessun risultato', true); return; }
+    queueIdx = 0; renderResults(); playTrack(queue[0]);
   });
 
-  document.getElementById('mp-play')!.onclick = () => {
-    if (!player?.getPlayerState) return;
-    player.getPlayerState() === 1 ? player.pauseVideo() : player.playVideo();
+  const renderResults = () => {
+    resultsEl.innerHTML = '';
+    queue.forEach((t, i) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="mp-r-title">${t.title}</span>
+                      <span class="mp-r-author">${t.author}</span>`;
+      if (i === queueIdx) li.classList.add('playing');
+      li.onclick = () => { queueIdx = i; playTrack(t); };
+      resultsEl.appendChild(li);
+    });
   };
-  (document.getElementById('mp-vol') as HTMLInputElement).oninput = (e) =>
-    player?.setVolume?.(Number((e.target as HTMLInputElement).value));
 
-  // --- Preferiti (persistiti in localStorage) ---
-  const favsEl = document.getElementById('mp-favs')!;
-  const getFavs = (): { id: string; title: string }[] =>
-    JSON.parse(localStorage.getItem('kga-music-favs') ?? '[]');
+  $('mp-play').onclick = () => {
+    if (usingAudio) { audio.paused ? audio.play() : audio.pause(); }
+    else if (ytPlayer?.getPlayerState) {
+      ytPlayer.getPlayerState() === 1 ? ytPlayer.pauseVideo() : ytPlayer.playVideo();
+    }
+  };
+  $('mp-next').onclick = nextTrack;
+  ($('mp-vol') as HTMLInputElement).oninput = (e) => {
+    const v = Number((e.target as HTMLInputElement).value);
+    audio.volume = v / 100; ytPlayer?.setVolume?.(v);
+  };
+
+  // ---------- PREFERITI ----------
+  const favsEl = $('mp-favs');
+  const getFavs = (): Track[] => JSON.parse(localStorage.getItem('kga-music-favs') ?? '[]');
   const renderFavs = () => {
     const favs = getFavs();
     favsEl.innerHTML = favs.length ? '<div class="mp-favs-title">PREFERITI</div>' : '';
@@ -93,24 +271,28 @@ export function initMusicPlayer(): void {
       const row = document.createElement('div');
       row.className = 'mp-fav-row';
       row.innerHTML = `<span class="mp-fav-name">${f.title}</span><span class="mp-fav-del">✕</span>`;
-      (row.querySelector('.mp-fav-name') as HTMLElement).onclick = () => loadVideo(f.id);
+      (row.querySelector('.mp-fav-name') as HTMLElement).onclick = () => {
+        queue = [f]; queueIdx = 0; renderResults(); playTrack(f);
+      };
       (row.querySelector('.mp-fav-del') as HTMLElement).onclick = () => {
-        localStorage.setItem('kga-music-favs',
-          JSON.stringify(getFavs().filter((x) => x.id !== f.id)));
+        localStorage.setItem('kga-music-favs', JSON.stringify(getFavs().filter((x) => x.id !== f.id)));
         renderFavs();
       };
       favsEl.appendChild(row);
     });
   };
-  document.getElementById('mp-fav')!.onclick = () => {
-    if (!currentId) return;
-    const title = player?.getVideoData?.()?.title ?? currentId;
+  $('mp-fav').onclick = () => {
+    if (!current) return;
     const favs = getFavs();
-    if (!favs.some((f) => f.id === currentId)) {
-      favs.push({ id: currentId, title: String(title).slice(0, 40) });
-      localStorage.setItem('kga-music-favs', JSON.stringify(favs));
-      renderFavs();
+    if (!favs.some((f) => f.id === current!.id)) {
+      favs.push(current); localStorage.setItem('kga-music-favs', JSON.stringify(favs)); renderFavs();
     }
   };
   renderFavs();
+
+  // chiudi: se stavi streammando in temp, cancella il file
+  window.addEventListener('beforeunload', () => {
+    if (currentJob) navigator.sendBeacon?.(`${SERVER}/done/${currentJob}`);
+  });
 }
+
