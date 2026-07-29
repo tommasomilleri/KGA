@@ -7,7 +7,7 @@ export function initUI(
   onSearch: (term: string) => void,
   onAddLink: (source: string, target: string) => void,
 ) {
-  const pane = new Pane({ title: 'KGA Control Panel' });
+  const pane: any = new Pane({ title: 'KGA Control Panel' });
   const PARAMS = { newNode: '', search: '', linkFrom: '', linkTo: '', threshold: getThreshold() };
 
   // --- Aggiungi nodo ---

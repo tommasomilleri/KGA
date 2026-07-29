@@ -16,7 +16,7 @@ import { initUI } from './ui';
 const container = document.getElementById('app');
 
 if (container) {
-  const graph = ForceGraph3D()(container)
+  const graph = (ForceGraph3D as any)()(container)    
     .backgroundColor('#050510')
     .nodeThreeObject((n) => nodeObject(n as KGNode))
     .linkDirectionalParticles((l) => Math.round((l as KGLink).weight * 4))

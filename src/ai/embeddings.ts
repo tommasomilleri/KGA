@@ -18,8 +18,7 @@ async function ollamaEmbed(text: string): Promise<EmbeddingResult | null> {
 
 let browserPipe: FeatureExtractionPipeline | null = null;
 async function browserEmbed(text: string): Promise<EmbeddingResult> {
-  browserPipe ??= await pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2');
-  const out = await browserPipe(text, { pooling: 'mean', normalize: true });
+browserPipe ??= (await pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2')) as any;  const out = await browserPipe(text, { pooling: 'mean', normalize: true });
   return { vector: Array.from(out.data as Float32Array), model: 'minilm' };
 }
 
