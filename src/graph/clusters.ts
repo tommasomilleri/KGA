@@ -7,7 +7,7 @@ import type { KGNode, KGLink } from '../core/types';
 const PALETTE = ['#FCE676', '#7AA2C6', '#8b7ad1', '#4ae28a', '#e2724a', '#4ac6e2'];
 
 export function assignClusters(nodes: KGNode[], links: KGLink[]): void {
-  const g = new Graph();
+  const g = new Graph({ type: 'undirected' });
   nodes.forEach(n => g.addNode(n.id));
   
   // Aggiungiamo i collegamenti calcolati dall'IA
