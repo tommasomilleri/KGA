@@ -12,7 +12,7 @@ export function assignClusters(nodes: KGNode[], links: KGLink[]): void {
   
   // Aggiungiamo i collegamenti calcolati dall'IA
   links.forEach(l => { 
-      try { g.addEdge(l.source, l.target, { weight: l.weight }); } catch {} 
+      try { g.addEdge(l.source, l.target, { weight: l.weight }); } catch { /* Ignora */ } 
   });
 
   // L'algoritmo divide la galassia in "Quartieri" (Comunità)
