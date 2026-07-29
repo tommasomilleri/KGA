@@ -5,25 +5,29 @@ import { db } from './data/db';
 import { safeAddNode } from './data/db-errors';
 import type { KGNode, KGLink } from './core/types';
 import { embed } from './ai/embeddings';
-import { autoLink, linkId } from './ai/similarity';
+import { autoLink, linkId, recalculateAllLinks } from './ai/similarity';
 import { classifyRelations } from './ai/relations';
 import { streamDefinition } from './ai/ollama';
 import { enqueue } from './ai/queue';
 import { assignClusters } from './graph/clusters';
 import { createBloom, nodeObject } from './graph/effects';
 import { initUI } from './ui';
-
+const selectedNodes = new Set<string>();
 const container = document.getElementById('app');
 
 if (container) {
-  const graph = (ForceGraph3D as any)()(container)    
+  const graph = (ForceGraph3D as any)()(container)
     .backgroundColor('#050510')
-    .nodeThreeObject((n) => nodeObject(n as KGNode))
-    .linkDirectionalParticles((l) => Math.round((l as KGLink).weight * 4))
+    .nodeThreeObject((n: any) => nodeObject(n as KGNode))
+    .linkDirectionalParticles((l: any) => Math.round((l as KGLink).weight * 4))
     .linkDirectionalParticleSpeed(0.004)
-    .linkWidth((l) => (l as KGLink).weight * 2)
-    .linkColor((l) => ((l as KGLink).origin === 'manual' ? '#FCE676' : 'rgba(255,255,255,0.25)'))
-    .linkLabel((l) => (l as KGLink).label ?? (l as KGLink).type);
+    .linkWidth((l: any) => (l as KGLink).weight * 2)
+    .linkColor((l: any) => ((l as KGLink).origin === 'manual' ? '#FCE676' : 'rgba(255,255,255,0.25)'))
+    .linkLabel((l: any) => (l as KGLink).label ?? (l as KGLink).type);
+
+  // FISICA DI ATTRAZIONE E REPULSIONE
+  graph.d3Force('charge').strength(-180);
+  graph.d3Force('link').distance((link: any) => Math.max(20, 120 - (link.weight * 80)));
 
   graph.postProcessingComposer().addPass(createBloom());
 
@@ -48,14 +52,13 @@ if (container) {
     }
   };
 
-  graph.onNodeClick((n) => flyToNode(n as KGNode));
+  graph.onNodeClick((n: any) => flyToNode(n as KGNode));
   closeBtn?.addEventListener('click', () => infoPanel?.classList.remove('visible'));
 
   let lastLinkCount = -1;
   const refreshGraph = async () => {
     const nodes = await db.nodes.toArray();
     const links = await db.links.toArray();
-    // Preserva le posizioni correnti (evita il "salto" del layout a ogni refresh)
     const current = new Map((graph.graphData().nodes as KGNode[]).map((n) => [n.id, n]));
     nodes.forEach((n) => {
       const old = current.get(n.id);
@@ -144,6 +147,34 @@ if (container) {
     await refreshGraph();
   };
 
-  initUI(handleAddNode, handleSearch, handleAddLink);
+  const handleDeleteNode = async (term: string) => {
+    const exists = await db.nodes.get(term);
+    if (!exists) {
+      alert(`Il nodo "${term}" non esiste nel grafo.`);
+      return;
+    }
+    if (confirm(`Sei sicuro di voler eliminare "${term}" e tutti i suoi collegamenti?`)) {
+      await db.transaction('rw', db.nodes, db.links, async () => {
+        await db.nodes.delete(term);
+        const allLinks = await db.links.toArray();
+        const linksToDelete = allLinks
+          .filter((l) => l.source === term || l.target === term)
+          .map((l) => l.id);
+        await db.links.bulkDelete(linksToDelete);
+      });
+      invalidateSearchIndex();
+      await refreshGraph();
+    }
+  };
+
+  // REFRESH: Ricalcola auto-link AI con la nuova soglia e ri-centra la camera
+  const handleRefresh = async () => {
+    const added = await recalculateAllLinks();
+    console.log(`[AI] Ricalcolo completato. Nuovi collegamenti creati: ${added}`);
+    graph.cameraPosition({ x: 0, y: 0, z: 250 }, { x: 0, y: 0, z: 0 }, 1500);
+    await refreshGraph();
+  };
+
+  initUI(handleAddNode, handleSearch, handleAddLink, handleDeleteNode, handleRefresh);
   refreshGraph();
 }

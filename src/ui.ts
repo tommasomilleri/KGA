@@ -6,9 +6,11 @@ export function initUI(
   onAddNode: (label: string) => void,
   onSearch: (term: string) => void,
   onAddLink: (source: string, target: string) => void,
+  onDeleteNode: (term: string) => void,
+  onRefresh: () => void
 ) {
   const pane: any = new Pane({ title: 'KGA Control Panel' });
-  const PARAMS = { newNode: '', search: '', linkFrom: '', linkTo: '', threshold: getThreshold() };
+  const PARAMS = { newNode: '', search: '', linkFrom: '', linkTo: '', nodeToDelete: '', threshold: getThreshold() };
 
   // --- Aggiungi nodo ---
   const addFolder = pane.addFolder({ title: 'Aggiungi Conoscenza' });
@@ -34,16 +36,29 @@ export function initUI(
     onAddLink(PARAMS.linkFrom.trim(), PARAMS.linkTo.trim()),
   );
 
-  // --- Impostazioni AI & Modello ---
+  // --- Gestione Grafo ---
+  const manageFolder = pane.addFolder({ title: 'Gestione Grafo' });
+  manageFolder.addButton({ title: '🔄 Ricalcola AI & Vista' }).on('click', () => onRefresh());
+  manageFolder.addBinding(PARAMS, 'nodeToDelete', { label: 'Nome Nodo' });
+  manageFolder.addButton({ title: '🗑️ Elimina Nodo' }).on('click', () => {
+    const term = PARAMS.nodeToDelete.trim();
+    if (term) {
+      onDeleteNode(term);
+      PARAMS.nodeToDelete = '';
+      pane.refresh();
+    }
+  });
+
+  // --- Impostazioni AI ---
   const aiFolder = pane.addFolder({ title: 'Impostazioni AI' });
   aiFolder
-    .addBinding(PARAMS, 'threshold', { label: 'Soglia similarita', min: 0.3, max: 0.9, step: 0.01 })
-    .on('change', (ev) => setThreshold(ev.value));
+    .addBinding(PARAMS, 'threshold', { label: 'Soglia', min: 0.3, max: 0.9, step: 0.01 })
+    .on('change', (ev: any) => setThreshold(ev.value));
 
   const MODEL_PARAMS = { model: localStorage.getItem('kga-model') ?? 'llama3.1:8b' };
   aiFolder
-    .addBinding(MODEL_PARAMS, 'model', { label: 'Modello Ollama' })
-    .on('change', (ev) => localStorage.setItem('kga-model', ev.value));
+    .addBinding(MODEL_PARAMS, 'model', { label: 'Ollama Model' })
+    .on('change', (ev: any) => localStorage.setItem('kga-model', ev.value));
 
   // --- Backup ---
   const dataFolder = pane.addFolder({ title: 'Dati' });
@@ -62,12 +77,8 @@ export function initUI(
     input.onchange = async () => {
       const file = input.files?.[0];
       if (file) {
-        try {
-          await importJSON(await file.text());
-          location.reload();
-        } catch (err) {
-          alert(err instanceof Error ? err.message : 'Import fallito.');
-        }
+        try { await importJSON(await file.text()); location.reload(); } 
+        catch (err) { alert(err instanceof Error ? err.message : 'Import fallito.'); }
       }
     };
     input.click();
