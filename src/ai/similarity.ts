@@ -35,7 +35,7 @@ export async function autoLink(term: string, vector: number[], model: string): P
   const newLinks: KGLink[] = [];
 
   for (const node of allNodes) {
-    if (node.id === term || !node.embedding) continue;
+    if (node.id === term || !node.embedding || node.embeddingModel !== model) continue;
     const sim = cosineSimilarity(vector, node.embedding);
     if (sim >= currentThreshold) {
       const id = linkId(term, node.id);

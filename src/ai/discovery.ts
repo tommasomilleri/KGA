@@ -1,6 +1,6 @@
 
 import { db } from '../data/db';
-import { cosine, linkId, getThreshold } from './similarity';
+import { cosineSimilarity, linkId, getThreshold } from './similarity';
 import { classifyRelations } from './relations';
 import type { KGLink } from '../core/types';
 
@@ -20,7 +20,7 @@ export async function findHiddenLinks(maxProposals = 10): Promise<Proposal[]> {
       if (!a.embedding || !b.embedding) continue;
       if (a.embeddingModel !== b.embeddingModel) continue;
       if (existing.has(linkId(a.id, b.id))) continue;
-      const sim = cosine(a.embedding, b.embedding);
+      const sim = cosineSimilarity(a.embedding, b.embedding);
       if (sim >= softThreshold) proposals.push({ source: a.id, target: b.id, sim });
     }
   }
@@ -32,7 +32,7 @@ export async function applyProposals(proposals: Proposal[]): Promise<number> {
   if (proposals.length === 0) return 0;
   const pairs = proposals.map((p) => [p.source, p.target] as [string, string]);
   const rels = await classifyRelations(pairs).catch(() => []);
-  const relMap = new Map(rels.map((r) => [linkId(r.da, r.a), r]));
+  const relMap = new Map(rels.map((r) => [linkId(r.da, r.a), r] as const));
 
   let count = 0;
   for (const p of proposals) {

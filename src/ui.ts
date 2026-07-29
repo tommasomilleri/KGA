@@ -17,7 +17,8 @@ export function initUI(
 ) {
   const pane: any = new Pane({ title: 'KGA Control Panel' });
   const PARAMS = { newNode: '', search: '', linkFrom: '', linkTo: '',
-                   threshold: getThreshold(), editTarget: '', editNewName: '' };
+                   threshold: getThreshold(), editTarget: '', editNewName: '',
+                   nodeToDelete: '' };
 
 
   // --- Aggiungi nodo ---

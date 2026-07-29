@@ -17,8 +17,6 @@ import { summarizeCluster } from './ai/summarize';
 
 
 
-
-const selectedNodes = new Set<string>();
 const container = document.getElementById('app');
 
 if (container) {
@@ -247,7 +245,13 @@ if (container) {
     graph.nodeThreeObject(graph.nodeThreeObject());
   });
 
-  initUI(handleAddNode, handleSearch, handleAddLink, () => { invalidateSearchIndex(); refreshGraph(); });
+  initUI(
+    handleAddNode, 
+    handleSearch,
+     handleAddLink, 
+     handleDeleteNode,
+      handleRefresh,
+     () => { invalidateSearchIndex(); refreshGraph(); });
 
   refreshGraph();
 }

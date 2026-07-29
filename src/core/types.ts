@@ -13,7 +13,8 @@ export interface KGNode {
 
 export type RelationType =
   | 'e-un' | 'parte-di' | 'influenza' | 'si-oppone-a'
-  | 'precede' | 'correlato' | 'custom';
+  | 'precede' | 'correlato' | 'custom'
+  | 'semantic_similarity';
 
 export interface KGLink {
   id: string;
@@ -21,6 +22,6 @@ export interface KGLink {
   target: string;
   type: RelationType;
   weight: number; // 0..1
-  origin: 'ai' | 'manual';
+  origin: 'ai' | 'manual'| 'auto';
   label?: string;
 }
