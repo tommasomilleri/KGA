@@ -80,21 +80,51 @@ export function initTerminal(actions: TerminalActions): void {
   };
 
   // ghost text: mostra la parte mancante in grigio dopo il testo digitato
-  const updateGhost = () => {
-    suggestion = complete(input.value);
-    if (suggestion && suggestion.toLowerCase().startsWith(input.value.toLowerCase())
-        && suggestion.length > input.value.length) {
-      ghost.textContent = input.value + suggestion.slice(input.value.length);
-    } else if (suggestion && suggestion !== input.value) {
-      ghost.textContent = '';           // fuzzy non-prefisso: mostralo nell'hint
-      hint.textContent = `⇥ ${suggestion}`;
-      hint.style.color = 'var(--dim)';
-      return;
-    } else {
-      ghost.textContent = '';
+  let items: string[] = [];
+  let selected = -1;
+  const listEl = document.getElementById('cmd-list') as HTMLUListElement;
+
+  const buildCandidates = (value: string): string[] => {
+    if (!value) return [];
+    if (value.startsWith('/') && !value.includes(' ')) {
+      return COMMANDS.filter((c) => c.startsWith(value.toLowerCase()));
     }
-    if (!input.value.startsWith('/')) hint.textContent = '';
+    const nodeNames = actions.getNodeNames();
+    let partial = value;
+    let prefix = '';
+    if (value.startsWith('/')) {
+      const i = value.indexOf(' ');
+      const cmd = value.slice(0, i);
+      if (!NODE_ARG_COMMANDS.has(cmd)) return [];
+      const segs = value.slice(i + 1).split('->');
+      partial = segs[segs.length - 1].trim();
+      segs[segs.length - 1] = ' ';
+      prefix = cmd + ' ' + segs.slice(0, -1).map((s) => s.trim()).join(' -> ')
+        + (segs.length > 1 ? ' -> ' : '');
+      prefix = prefix.replace(/\s+$/, ' ');
+    }
+    if (!partial) return [];
+    const lower = partial.toLowerCase();
+    const starts = nodeNames.filter((n) => n.toLowerCase().startsWith(lower));
+    const fuse = new Fuse(nodeNames.filter((n) => !starts.includes(n)), { threshold: 0.35 });
+    const fuzzy = fuse.search(partial).map((r) => r.item);
+    return [...starts, ...fuzzy].slice(0, 8).map((n) => prefix + n);
   };
+
+  const renderList = () => {
+    listEl.innerHTML = '';
+    listEl.style.display = items.length ? 'block' : 'none';
+    items.forEach((it, i) => {
+      const li = document.createElement('li');
+      li.textContent = it;
+      if (i === selected) li.classList.add('sel');
+      li.onmouseenter = () => { selected = i; renderList(); };
+      li.onclick = () => { input.value = it; closeList(); input.focus(); };
+      listEl.appendChild(li);
+    });
+  };
+  const closeList = () => { items = []; selected = -1; renderList(); };
+
 
   // ---------- ESECUZIONE COMANDI ----------
   const run = async (raw: string) => {
@@ -109,21 +139,21 @@ export function initTerminal(actions: TerminalActions): void {
     const [cmd, ...rest] = line.split(' ');
     const arg = rest.join(' ').trim();
     switch (cmd) {
-      case '/cerca':    actions.search(arg); break;
+      case '/cerca': actions.search(arg); break;
       case '/collega': {
         const [a, b] = arg.split('->').map((s) => s.trim());
         if (a && b) { actions.addLink(a, b); flash(`${a} <-> ${b}`); }
         else flash('uso: /collega A -> B', false);
         break;
       }
-      case '/elimina':  actions.deleteNode(arg); break;
+      case '/elimina': actions.deleteNode(arg); break;
       case '/rinomina': {
         const [o, n] = arg.split('->').map((s) => s.trim());
         if (o && n) { await actions.renameNode(o, n); flash(`${o} -> ${n}`); }
         else flash('uso: /rinomina VECCHIO -> NUOVO', false);
         break;
       }
-      case '/scopri':    actions.discover(); break;
+      case '/scopri': actions.discover(); break;
       case '/ricalcola': actions.recalc(); flash('ricalcolo…'); break;
       case '/soglia': {
         const v = parseFloat(arg);
@@ -131,32 +161,48 @@ export function initTerminal(actions: TerminalActions): void {
         else flash('valore tra 0.3 e 0.9', false);
         break;
       }
-      case '/modello':  actions.setModel(arg); flash(`modello = ${arg}`); break;
-      case '/esporta':  actions.exportData(); flash('backup scaricato'); break;
-      case '/font':     document.dispatchEvent(new CustomEvent('kga:fontlab')); break;
-      case '/aiuto':    flash(COMMANDS.join('  ')); break;
-      default:          flash(`comando sconosciuto: ${cmd}`, false);
+      case '/modello': actions.setModel(arg); flash(`modello = ${arg}`); break;
+      case '/esporta': actions.exportData(); flash('backup scaricato'); break;
+      case '/font': document.dispatchEvent(new CustomEvent('kga:fontlab')); break;
+      case '/aiuto': flash(COMMANDS.join('  ')); break;
+      default: flash(`comando sconosciuto: ${cmd}`, false);
     }
   };
 
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Tab') {
+    if (items.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
       e.preventDefault();
-      if (suggestion) { input.value = suggestion; updateGhost(); }
+      selected = e.key === 'ArrowDown'
+        ? (selected + 1) % items.length
+        : (selected - 1 + items.length) % items.length;
+      renderList();
+    } else if (items.length && e.key === 'Tab') {
+      e.preventDefault();
+      input.value = items[selected];      // TAB conferma la voce evidenziata
+      closeList();
     } else if (e.key === 'Enter') {
-      run(input.value); input.value = ''; ghost.textContent = ''; hint.textContent = '';
-    } else if (e.key === 'ArrowUp') {
+      if (items.length && selected >= 0 && items[selected] !== input.value
+          && input.value.startsWith('/') && !input.value.includes(' ')) {
+        input.value = items[selected];    // Enter su comando parziale: completa
+        closeList(); return;
+      }
+      closeList(); run(input.value); input.value = ''; hint.textContent = '';
+    } else if (e.key === 'ArrowUp' && !items.length) {
       e.preventDefault();
-      if (hIndex > 0) { hIndex--; input.value = history[hIndex]; updateGhost(); }
-    } else if (e.key === 'ArrowDown') {
+      if (hIndex > 0) { hIndex--; input.value = history[hIndex]; }
+    } else if (e.key === 'ArrowDown' && !items.length) {
       e.preventDefault();
       if (hIndex < history.length - 1) { hIndex++; input.value = history[hIndex]; }
       else { hIndex = history.length; input.value = ''; }
-      updateGhost();
-    } else if (e.key === 'Escape') { ghost.textContent = ''; input.blur(); }
+    } else if (e.key === 'Escape') { closeList(); input.blur(); }
   });
 
-  input.addEventListener('input', updateGhost);
+
+  input.addEventListener('input', () => {
+    items = buildCandidates(input.value);
+    selected = items.length ? 0 : -1;
+    renderList();
+  });
 
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); input.focus(); }

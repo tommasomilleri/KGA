@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 import './style.css';
 import ForceGraph3D from '3d-force-graph';
 import Fuse from 'fuse.js';
@@ -20,8 +22,21 @@ import { setThreshold } from './ai/similarity';
 import { renameNode } from './data/mutations';
 import { exportJSON } from './data/db';
 import { findHiddenLinks, applyProposals } from './ai/discovery';
+import { initMusicPlayer } from './ui/music';
+import { initSettings } from './ui/settings';
+import { getThreshold } from './ai/similarity';
+import { createGraph2D } from './graph/renderer2d';
 
 
+
+const scene = graph.scene();
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+const key = new THREE.DirectionalLight(0xffffff, 1.1);
+key.position.set(120, 180, 80);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x88aaff, 0.4);  // controluce fredda
+rim.position.set(-100, -60, -120);
+scene.add(rim);
 
 
 const container = document.getElementById('app');
@@ -172,6 +187,8 @@ if (container) {
       lastLinkCount = links.length;
     }
     graph.graphData({ nodes, links });
+    if (is2D && graph2d) graph2d.graphData({ nodes, links });
+
   };
 
   let lastClickTime = 0;
@@ -258,6 +275,29 @@ if (container) {
     }
   };
 
+  let bloomPass = createBloom();               // tieni il riferimento
+  graph.postProcessingComposer().addPass(bloomPass);
+  let nodeScale = 1;                           // usalo dentro nodeObject: size * nodeScale
+  // (esporta una setNodeScale da effects.ts
+  //  o passa via modulo highlight-style)
+
+  initSettings({
+    setThreshold, getThreshold,
+    setModel: (m) => localStorage.setItem('kga-model', m),
+    getModel: () => localStorage.getItem('kga-model') ?? 'llama3.1:8b',
+    setCharge: (v) => { graph.d3Force('charge').strength(v); graph.d3ReheatSimulation(); },
+    setParticleSpeed: (v) => graph.linkDirectionalParticleSpeed(v),
+    setAutoRotate: (on, speed) => {
+      graph.controls().autoRotate = on;
+      graph.controls().autoRotateSpeed = speed;
+    },
+    setBloom: (on) => { bloomPass.enabled = on; },
+    setNodeScale: (v) => { nodeScale = v; graph.nodeThreeObject(graph.nodeThreeObject()); },
+    exportData: /* riusa la funzione export gia' presente */ exportHandler,
+    importData: /* riusa l'import file picker gia' presente */ importHandler,
+    resetDB: async () => { await db.nodes.clear(); await db.links.clear(); location.reload(); },
+  });
+
   let fuseIndex: Fuse<KGNode> | null = null;
   const invalidateSearchIndex = () => { fuseIndex = null; };
 
@@ -282,6 +322,39 @@ if (container) {
     if (await db.links.get(id)) { alert('Questi nodi sono gia collegati.'); return; }
     await db.links.add({ id, source, target, type: 'custom', weight: 0.8, origin: 'manual', label: 'collegato a' });
     await refreshGraph();
+  };
+  const container2d = document.getElementById('app2d')!;
+  let graph2d: ReturnType<typeof createGraph2D> | null = null;
+  let is2D = false;
+
+  const dimBtn = document.getElementById('dim-toggle')!;
+  dimBtn.onclick = async () => {
+    is2D = !is2D;
+    dimBtn.textContent = is2D ? '3D' : '2D';
+    container.style.display = is2D ? 'none' : 'block';
+    container2d.style.display = is2D ? 'block' : 'none';
+    document.body.classList.toggle('paper', is2D);   // tema chiaro per la UI
+    if (is2D) {
+      if (!graph2d) graph2d = createGraph2D(container2d, flyToNode2D, () => { });
+      const nodes = await db.nodes.toArray();
+      const links = await db.links.toArray();
+      nodes.forEach((n) => {
+        n.degree = links.filter((l) => l.source === n.id || l.target === n.id).length;
+      });
+      graph2d.graphData({ nodes, links });
+    }
+  };
+
+  const flyToNode2D = (node: KGNode) => {
+    graph2d?.centerAt(node.x, node.y, 800);
+    graph2d?.zoom(3, 800);
+    // riusa il pannello info esistente:
+    if (nodeTitle && nodeDesc && infoPanel) {
+      nodeTitle.innerText = node.label;
+      nodeDesc.innerText = node.info || '…';
+      infoPanel.classList.add('visible');
+      renderNodeLinks(node.id);
+    }
   };
 
   const handleDeleteNode = async (term: string) => {
@@ -377,6 +450,7 @@ if (container) {
   });
 
   initFontLab();
+  initMusicPlayer();
 
   refreshGraph();
 }

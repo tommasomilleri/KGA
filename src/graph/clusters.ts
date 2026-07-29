@@ -4,7 +4,16 @@ import louvain from 'graphology-communities-louvain';
 import type { KGNode, KGLink } from '../core/types';
 
 // La nostra palette di colori "galattica"
-const PALETTE = ['#FCE676', '#7AA2C6', '#8b7ad1', '#4ae28a', '#e2724a', '#4ac6e2'];
+const PALETTE = [
+  '#E8C468', // oro sabbia
+  '#6FA8DC', // blu polvere
+  '#9B8CC4', // lavanda
+  '#7BC49A', // salvia
+  '#D98E73', // terracotta
+  '#6BC5C9', // petrolio chiaro
+  '#C97B9B', // malva
+  '#A3B18A', // oliva
+];
 
 export function assignClusters(nodes: KGNode[], links: KGLink[]): void {
   const g = new Graph({ type: 'undirected' });
