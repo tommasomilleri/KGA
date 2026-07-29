@@ -14,6 +14,7 @@ import { createBloom, nodeObject } from './graph/effects';
 import { initUI } from './ui';
 import { highlight, computeNeighbors, computeNeighborhood } from './graph/highlight';
 import { summarizeCluster } from './ai/summarize';
+     import { createMinimap } from './graph/minimap';
 
 
 
@@ -21,7 +22,19 @@ const container = document.getElementById('app');
 
 if (container) {
   const graph = (ForceGraph3D as any)()(container)
-    .backgroundColor('#050510')
+    .backgroundColor('#030308')
+    .nodeLabel((n: any) => `
+    <div style="
+      background: rgba(15,15,25,.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font: 500 13px Inter, sans-serif;
+      color: #fff;
+      letter-spacing: .02em;
+    ">${(n as KGNode).label}</div>
+  `)
     .nodeThreeObject((n: any) => nodeObject(n as KGNode))
     .linkDirectionalParticles((l: any) => Math.round((l as KGLink).weight * 4))
     .linkDirectionalParticleSpeed(0.004)
@@ -48,7 +61,7 @@ if (container) {
       (!highlight.hoverId || (highlight.neighbors.has(src) && highlight.neighbors.has(tgt))) &&
       (!highlight.focusId || (highlight.focusVisible.has(src) && highlight.focusVisible.has(tgt)));
     if (!active) return 'rgba(255,255,255,0.03)';
-    return link.origin === 'manual' ? '#FCE676' : 'rgba(255,255,255,0.25)';
+    return link.origin === 'manual' ? '#FCE676' : 'rgba(255,255,255,0.12)';
   });
 
   // FISICA DI ATTRAZIONE E REPULSIONE
@@ -80,6 +93,26 @@ if (container) {
 
   graph.onNodeClick((n: any) => flyToNode(n as KGNode));
   closeBtn?.addEventListener('click', () => infoPanel?.classList.remove('visible'));
+
+
+  const visited: string[] = [];
+  const renderBreadcrumb = () => {
+    const el = document.getElementById('breadcrumb');
+    if (!el) return;
+    el.innerHTML = '';
+    visited.slice(-4).forEach((id) => {
+      const s = document.createElement('span');
+      s.textContent = id;
+      s.onclick = () => {
+        const n = (graph.graphData().nodes as KGNode[]).find((x) => x.id === id);
+        if (n) flyToNode(n);
+      };
+      el.appendChild(s);
+    });
+  };
+  // Dentro flyToNode, come ULTIMA riga del corpo, aggiungi:
+  //   if (visited[visited.length - 1] !== node.id) { visited.push(node.id); renderBreadcrumb(); }
+
 
   let lastLinkCount = -1;
   const refreshGraph = async () => {
@@ -119,6 +152,18 @@ if (container) {
     }
   });
 
+  let idleTimer: ReturnType<typeof setTimeout>;
+  const resetIdle = () => {
+    graph.controls().autoRotate = false;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      graph.controls().autoRotate = true;
+      graph.controls().autoRotateSpeed = 0.4; // lentissimo, elegante
+    }, 30000); // 30s senza input
+  };
+  ['mousemove', 'mousedown', 'wheel', 'touchstart', 'keydown']
+    .forEach((ev) => document.addEventListener(ev, resetIdle));
+  resetIdle();
 
 
   const handleAddNode = async (term: string) => {
@@ -244,6 +289,13 @@ if (container) {
     }
     graph.nodeThreeObject(graph.nodeThreeObject());
   });
+
+     createMinimap(
+       () => graph.graphData().nodes as KGNode[],
+       () => { const c = graph.cameraPosition(); return { x: c.x, z: c.z }; },
+       (x, z) => graph.cameraPosition({ x, y: 80, z: z + 120 }, { x, y: 0, z }, 1200),
+     );
+
 
   initUI(
     handleAddNode, 

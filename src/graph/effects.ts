@@ -6,9 +6,9 @@ import { highlight } from './highlight';
 export function createBloom(): UnrealBloomPass {
   const pass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
-    1.2,   // strength
-    0.4,   // radius
-    0.15,  // threshold
+    0.35,   // strength
+    0.25,   // radius
+    0.55,  // threshold
   );
   return pass;
 }
@@ -22,7 +22,9 @@ export function nodeObject(node: KGNode): THREE.Mesh {
     new THREE.MeshStandardMaterial({
       color: node.color || '#ffffff',
       emissive: node.color || '#ffffff',
-      emissiveIntensity: dimmed ? 0.08 : 0.9,
+      emissiveIntensity: dimmed ? 0.04 : 0.45,
+      roughness: 0.4,
+      metalness: 0.1,
       transparent: true,
       opacity: dimmed ? 0.15 : 1,
     }),
