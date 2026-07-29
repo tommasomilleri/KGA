@@ -29,14 +29,7 @@ import { createGraph2D } from './graph/renderer2d';
 
 
 
-const scene = graph.scene();
-scene.add(new THREE.AmbientLight(0xffffff, 0.35));
-const key = new THREE.DirectionalLight(0xffffff, 1.1);
-key.position.set(120, 180, 80);
-scene.add(key);
-const rim = new THREE.DirectionalLight(0x88aaff, 0.4);  // controluce fredda
-rim.position.set(-100, -60, -120);
-scene.add(rim);
+
 
 
 const container = document.getElementById('app');
@@ -90,7 +83,14 @@ if (container) {
   graph.d3Force('link').distance((link: any) => Math.max(20, 120 - (link.weight * 80)));
 
   graph.postProcessingComposer().addPass(createBloom());
-
+  const scene = graph.scene();
+  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+  const key = new THREE.DirectionalLight(0xffffff, 1.1);
+  key.position.set(120, 180, 80);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x88aaff, 0.4);  // controluce fredda
+  rim.position.set(-100, -60, -120);
+  scene.add(rim);
   const infoPanel = document.getElementById('info-panel');
   const nodeTitle = document.getElementById('node-title');
   const nodeDesc = document.getElementById('node-description');
@@ -293,8 +293,32 @@ if (container) {
     },
     setBloom: (on) => { bloomPass.enabled = on; },
     setNodeScale: (v) => { nodeScale = v; graph.nodeThreeObject(graph.nodeThreeObject()); },
-    exportData: /* riusa la funzione export gia' presente */ exportHandler,
-    importData: /* riusa l'import file picker gia' presente */ importHandler,
+    exportData: async () => {
+      const blob = new Blob([await exportJSON()], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `kga-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click(); URL.revokeObjectURL(a.href);
+    },
+    importData: async () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (file) {
+          try {
+            const { importJSON } = await import('./data/db');
+            await importJSON(await file.text()); location.reload();
+          }
+          catch (err) {
+            alert(err instanceof Error ? err.message : 'Import fallito');
+          }
+        }
+      };
+      input.click();
+    },
+
     resetDB: async () => { await db.nodes.clear(); await db.links.clear(); location.reload(); },
   });
 

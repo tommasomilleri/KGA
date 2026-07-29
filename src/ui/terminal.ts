@@ -25,11 +25,9 @@ const NODE_ARG_COMMANDS = new Set(['/cerca', '/elimina', '/collega', '/rinomina'
 
 export function initTerminal(actions: TerminalActions): void {
   const input = document.getElementById('cmd-input') as HTMLInputElement;
-  const ghost = document.getElementById('cmd-ghost')!;
   const hint = document.getElementById('cmd-hint')!;
   const history: string[] = JSON.parse(localStorage.getItem('kga-history') ?? '[]');
   let hIndex = history.length;
-  let suggestion = '';                 // testo completo suggerito
 
   const flash = (msg: string, ok = true) => {
     hint.textContent = msg;
@@ -37,36 +35,6 @@ export function initTerminal(actions: TerminalActions): void {
     setTimeout(() => { hint.textContent = ''; }, 2500);
   };
 
-  // ---------- MOTORE DI COMPLETAMENTO ----------
-  const complete = (value: string): string => {
-    if (!value) return '';
-
-    // Caso 1: sta scrivendo un comando ("/ce" -> "/cerca ")
-    if (value.startsWith('/') && !value.includes(' ')) {
-      const m = COMMANDS.find((c) => c.startsWith(value.toLowerCase()));
-      return m ? m + ' ' : '';
-    }
-
-    // Caso 2: comando + argomento nodo ("/cerca gat" -> "/cerca gatto")
-    if (value.startsWith('/')) {
-      const spaceIdx = value.indexOf(' ');
-      const cmd = value.slice(0, spaceIdx);
-      if (!NODE_ARG_COMMANDS.has(cmd)) return '';
-      const argPart = value.slice(spaceIdx + 1);
-      // per /collega e /rinomina completa solo il segmento dopo l'ultimo "->"
-      const segs = argPart.split('->');
-      const last = segs[segs.length - 1].trimStart();
-      if (!last) return '';
-      const match = fuzzyBest(last);
-      if (!match) return '';
-      segs[segs.length - 1] = segs[segs.length - 1].replace(/\S.*$/, match);
-      return cmd + ' ' + segs.join('->');
-    }
-
-    // Caso 3: testo semplice ("gat" -> "gatto" se il nodo esiste)
-    const match = fuzzyBest(value);
-    return match ?? '';
-  };
 
   // fuzzy: prima prefisso esatto, poi Fuse
   const fuzzyBest = (partial: string): string | null => {
