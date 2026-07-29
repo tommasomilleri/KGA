@@ -12,6 +12,12 @@ import { enqueue } from './ai/queue';
 import { assignClusters } from './graph/clusters';
 import { createBloom, nodeObject } from './graph/effects';
 import { initUI } from './ui';
+import { highlight, computeNeighbors, computeNeighborhood } from './graph/highlight';
+import { summarizeCluster } from './ai/summarize';
+
+
+
+
 const selectedNodes = new Set<string>();
 const container = document.getElementById('app');
 
@@ -24,6 +30,28 @@ if (container) {
     .linkWidth((l: any) => (l as KGLink).weight * 2)
     .linkColor((l: any) => ((l as KGLink).origin === 'manual' ? '#FCE676' : 'rgba(255,255,255,0.25)'))
     .linkLabel((l: any) => (l as KGLink).label ?? (l as KGLink).type);
+
+  graph
+    .onNodeHover((n) => {
+      const node = n as KGNode | null;
+      highlight.hoverId = node?.id ?? null;
+      highlight.neighbors = node
+        ? computeNeighbors(node.id, graph.graphData().links as KGLink[])
+        : new Set();
+      graph.nodeThreeObject(graph.nodeThreeObject()); // forza il re-render dei nodi
+    })
+    .linkOpacity(0.9);
+
+  graph.linkColor((l) => {
+    const link = l as KGLink;
+    const src = typeof link.source === 'object' ? (link.source as unknown as KGNode).id : link.source;
+    const tgt = typeof link.target === 'object' ? (link.target as unknown as KGNode).id : link.target;
+    const active =
+      (!highlight.hoverId || (highlight.neighbors.has(src) && highlight.neighbors.has(tgt))) &&
+      (!highlight.focusId || (highlight.focusVisible.has(src) && highlight.focusVisible.has(tgt)));
+    if (!active) return 'rgba(255,255,255,0.03)';
+    return link.origin === 'manual' ? '#FCE676' : 'rgba(255,255,255,0.25)';
+  });
 
   // FISICA DI ATTRAZIONE E REPULSIONE
   graph.d3Force('charge').strength(-180);
@@ -71,6 +99,29 @@ if (container) {
     }
     graph.graphData({ nodes, links });
   };
+
+  let lastClickTime = 0;
+  graph.onNodeClick((n) => {
+    const node = n as KGNode;
+    const now = Date.now();
+    const isDouble = now - lastClickTime < 350;
+    lastClickTime = now;
+    lastClickedId = node.id;
+    if (isDouble && node.cluster !== undefined) {
+      if (nodeTitle && nodeDesc && infoPanel) {
+        nodeTitle.innerText = `Cluster di "${node.label}"`;
+        nodeDesc.innerText = '⏳ Sintesi in corso...';
+        infoPanel.classList.add('visible');
+        summarizeCluster(node.cluster)
+          .then((text) => { nodeDesc.innerText = text; })
+          .catch(() => { nodeDesc.innerText = 'Sintesi non disponibile (Ollama offline).'; });
+      }
+    } else {
+      flyToNode(node);
+    }
+  });
+
+
 
   const handleAddNode = async (term: string) => {
     const newNode: KGNode = {
@@ -175,6 +226,28 @@ if (container) {
     await refreshGraph();
   };
 
-  initUI(handleAddNode, handleSearch, handleAddLink, handleDeleteNode, handleRefresh);
+  let lastClickedId: string | null = null;
+  graph.onNodeClick((n) => { lastClickedId = (n as KGNode).id; flyToNode(n as KGNode); });
+  // NOTA: questa riga SOSTITUISCE la vecchia `graph.onNodeClick((n) => flyToNode(n as KGNode));`
+  // eliminala per non avere due handler.
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() !== 'f') return;
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return; // non rubare la F ai campi testo
+    if (highlight.focusId) {
+      highlight.focusId = null;
+      highlight.focusVisible = new Set();
+    } else if (lastClickedId) {
+      highlight.focusId = lastClickedId;
+      highlight.focusVisible = computeNeighborhood(
+        lastClickedId, graph.graphData().links as KGLink[], 2,
+      );
+    }
+    graph.nodeThreeObject(graph.nodeThreeObject());
+  });
+
+  initUI(handleAddNode, handleSearch, handleAddLink, () => { invalidateSearchIndex(); refreshGraph(); });
+
   refreshGraph();
 }

@@ -1,16 +1,24 @@
 import { Pane } from 'tweakpane';
 import { getThreshold, setThreshold } from './ai/similarity';
 import { exportJSON, importJSON } from './data/db';
+import { deleteNode, renameNode } from './data/mutations';
+import { findHiddenLinks, applyProposals } from './ai/discovery';
+
+
 
 export function initUI(
   onAddNode: (label: string) => void,
   onSearch: (term: string) => void,
   onAddLink: (source: string, target: string) => void,
   onDeleteNode: (term: string) => void,
-  onRefresh: () => void
+  onRefresh: () => void,
+  onGraphChanged: () => void,          // <-- NUOVO
+
 ) {
   const pane: any = new Pane({ title: 'KGA Control Panel' });
-  const PARAMS = { newNode: '', search: '', linkFrom: '', linkTo: '', nodeToDelete: '', threshold: getThreshold() };
+  const PARAMS = { newNode: '', search: '', linkFrom: '', linkTo: '',
+                   threshold: getThreshold(), editTarget: '', editNewName: '' };
+
 
   // --- Aggiungi nodo ---
   const addFolder = pane.addFolder({ title: 'Aggiungi Conoscenza' });
@@ -36,6 +44,26 @@ export function initUI(
     onAddLink(PARAMS.linkFrom.trim(), PARAMS.linkTo.trim()),
   );
 
+  // --- Gestione nodi (elimina / rinomina) ---
+  const editFolder = pane.addFolder({ title: 'Gestione Nodo' });
+  editFolder.addBinding(PARAMS, 'editTarget', { label: 'Nodo' });
+  editFolder.addBinding(PARAMS, 'editNewName', { label: 'Nuovo nome' });
+  editFolder.addButton({ title: 'Rinomina' }).on('click', async () => {
+    try {
+      await renameNode(PARAMS.editTarget.trim(), PARAMS.editNewName.trim());
+      onGraphChanged();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Rinomina fallita.');
+    }
+  });
+  editFolder.addButton({ title: 'Elimina nodo' }).on('click', async () => {
+    const id = PARAMS.editTarget.trim();
+    if (!id) return;
+    if (!confirm(`Eliminare "${id}" e tutti i suoi collegamenti?`)) return;
+    await deleteNode(id);
+    onGraphChanged();
+  });
+
   // --- Gestione Grafo ---
   const manageFolder = pane.addFolder({ title: 'Gestione Grafo' });
   manageFolder.addButton({ title: '🔄 Ricalcola AI & Vista' }).on('click', () => onRefresh());
@@ -59,6 +87,21 @@ export function initUI(
   aiFolder
     .addBinding(MODEL_PARAMS, 'model', { label: 'Ollama Model' })
     .on('change', (ev: any) => localStorage.setItem('kga-model', ev.value));
+
+  // --- Scoperta collegamenti nascosti ---
+  const discoveryFolder = pane.addFolder({ title: 'Scoperta AI' });
+  discoveryFolder.addButton({ title: 'Trova collegamenti nascosti' }).on('click', async () => {
+    const proposals = await findHiddenLinks(10);
+    if (proposals.length === 0) { alert('Nessun collegamento nascosto trovato.'); return; }
+    const summary = proposals
+      .map((p) => `• ${p.source} <-> ${p.target} (${Math.round(p.sim * 100)}%)`)
+      .join('\n');
+    if (confirm(`Trovati ${proposals.length} collegamenti:\n\n${summary}\n\nAggiungerli tutti?`)) {
+      const n = await applyProposals(proposals);
+      alert(`${n} collegamenti aggiunti.`);
+      onGraphChanged();
+    }
+  });
 
   // --- Backup ---
   const dataFolder = pane.addFolder({ title: 'Dati' });
