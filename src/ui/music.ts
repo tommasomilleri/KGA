@@ -232,13 +232,27 @@ export function initMusicPlayer(): void {
     if (!ytPlayer) {
       ytPlayer = new YT.Player('mp-frame', {
         height: '158', width: '272', videoId: track.id,
-        playerVars: { autoplay: 1, origin: window.location.origin, playsinline: 1 },
+        playerVars: { autoplay: 1, mute:1,origin: window.location.origin, playsinline: 1 },
         events: {
-          onError: () => { setStatus('✕ embedding bloccato, salto…', true); nextTrack(); },
-          onReady: (e: any) => e.target.playVideo(),
+        onError: (e: any) => { 
+          setStatus(`✕ non riproducibile (${e.data}), salto…`, true); 
+          setTimeout(nextTrack, 800); 
         },
-      });
-    } else ytPlayer.loadVideoById(track.id);
+        onReady: (e: any) => { 
+          e.target.playVideo();
+        },
+        onStateChange: (ev: any) => {
+          if (ev.data === 1) {
+            ev.target.unMute();
+            ev.target.setVolume(Number((document.getElementById('mp-vol') as HTMLInputElement)?.value ?? 60));
+            setStatus(`▶ ${current?.title ?? ""} — ${current?.author ?? ""}`);
+          }
+        }
+      }
+    });
+  } else {
+    ytPlayer.loadVideoById(track.id);
+  }
     setStatus(`▶ (YouTube) ${track.title} — ${track.author}`);
   };
 
@@ -283,6 +297,11 @@ export function initMusicPlayer(): void {
 
     queue = await resolveVideoId(searchQuery + ' official audio');
     if (!queue.length) queue = await resolveVideoId(searchQuery);
+    queue.sort((a,b)=> {const score = (t:Track) => (/audio|lyric|topic/i.test(t.title + '' + t.author) ? 1 : 0);
+      return score(b) - score(a); });
+
+
+
 if (!queue.length) {
       setStatus('ricerca offline — incolla un link YouTube o salva una key con /ytkey', true);
       return;
