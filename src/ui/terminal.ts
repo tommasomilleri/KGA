@@ -18,7 +18,7 @@ export interface TerminalActions {
 
 const COMMANDS = [
   '/cerca', '/collega', '/elimina', '/rinomina', '/scopri',
-  '/ricalcola', '/soglia', '/modello', '/esporta', '/aiuto', '/font', '/ytkey',
+  '/ricalcola', '/soglia', '/modello', '/esporta', '/aiuto', '/font', '/ytkey', '/saggio', 
 ];
 
 
@@ -129,9 +129,16 @@ export function initTerminal(actions: TerminalActions): void {
         else flash('uso: /ytkey LA_TUA_KEY', false);
         break;
 
+      case '/saggio': {
+        const { exportEssayPDF } = await import('../ai/essay');
+        try { await exportEssayPDF((m) => flash(m)); }
+        catch (err) { flash(err instanceof Error ? err.message : 'errore saggio', false); }
+        break;
+      }
 
       case '/aiuto': flash(COMMANDS.join('  ')); break;
       default: flash(`comando sconosciuto: ${cmd}`, false);
+      
     }
   };
 

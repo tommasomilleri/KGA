@@ -173,6 +173,7 @@ export function initMusicPlayer(): void {
   let current: Track | null = null;
   let currentJob: string | null = null;
   let usingAudio = false;
+  let playGen = 0; // per evitare race condition tra play
 
   const setStatus = (m: string, err = false) => {
     status.textContent = m;
@@ -188,7 +189,8 @@ export function initMusicPlayer(): void {
     keepBox.parentElement!.style.display = serverOnline ? 'block' : 'none';
   };
   refreshBadge();
-  setInterval(refreshBadge, 30000);
+  setInterval(refreshBadge, 10000);
+  $('music-toggle').addEventListener('click', refreshBadge);
 
   // ---------- PLAYBACK ----------
   const stopAll = () => {
@@ -198,7 +200,9 @@ export function initMusicPlayer(): void {
   };
 
   const playViaServer = async (track: Track): Promise<boolean> => {
+    const gen = ++playGen;
     setStatus(`⬇ yt-dlp: ${track.title}…`);
+
     try {
       const r = await fetch(`${SERVER}/download`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -209,6 +213,8 @@ export function initMusicPlayer(): void {
       // polling fino a ready (max 90s)
       for (let i = 0; i < 90; i++) {
         await new Promise((res) => setTimeout(res, 1000));
+        if (gen !== playGen) return false;   // l'utente ha cambiato brano
+
         const st = await (await fetch(`${SERVER}/status/${jobId}`)).json();
         if (st.status === 'ready') {
           currentJob = jobId;
@@ -253,15 +259,20 @@ export function initMusicPlayer(): void {
   } else {
     ytPlayer.loadVideoById(track.id);
   }
-    setStatus(`▶ (YouTube) ${track.title} — ${track.author}`);
   };
 
   const playTrack = async (track: Track) => {
     stopAll();
     current = track;
     renderResults();
-    if (serverOnline && (await playViaServer(track))) return;
-    await playViaYouTube(track);         // fallback trasparente
+    await checkServer();
+    if (serverOnline) {
+      if (await playViaServer(track)) return;
+      setStatus('yt-dlp fallito su questo brano, salto…', true);
+      nextTrack();
+      return;
+    }
+    await playViaYouTube(track);
   };
 
   const nextTrack = () => {
@@ -270,7 +281,7 @@ export function initMusicPlayer(): void {
   };
 
   // fine brano: notifica il server (cancella se temp) e passa al prossimo
-  audio.onended = () => { stopAll(); nextTrack(); };
+  audio.onended = () => {nextTrack(); };
   audio.ontimeupdate = () => {
     if (audio.duration) seek.value = String((audio.currentTime / audio.duration) * 100);
   };
@@ -297,8 +308,11 @@ export function initMusicPlayer(): void {
 
     queue = await resolveVideoId(searchQuery + ' official audio');
     if (!queue.length) queue = await resolveVideoId(searchQuery);
-    queue.sort((a,b)=> {const score = (t:Track) => (/audio|lyric|topic/i.test(t.title + '' + t.author) ? 1 : 0);
-      return score(b) - score(a); });
+    queue.sort((a, b) => {
+      const score = (t: Track) => (/audio|lyric|topic/i.test(t.title + ' ' + t.author) ? 1 : 0);
+      return score(b) - score(a);
+    });
+
 
 
 

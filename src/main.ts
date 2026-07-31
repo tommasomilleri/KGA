@@ -12,7 +12,7 @@ import { classifyRelations } from './ai/relations';
 import { streamDefinition } from './ai/ollama';
 import { enqueue } from './ai/queue';
 import { assignClusters } from './graph/clusters';
-import { createBloom, nodeObject } from './graph/effects';
+import { createBloom, nodeObject, tickClouds } from './graph/effects';
 import { highlight, computeNeighbors, computeNeighborhood } from './graph/highlight';
 import { summarizeCluster } from './ai/summarize';
 import { createMinimap } from './graph/minimap';
@@ -26,6 +26,7 @@ import { initMusicPlayer } from './ui/music';
 import { initSettings } from './ui/settings';
 import { getThreshold } from './ai/similarity';
 import { createGraph2D } from './graph/renderer2d';
+import { semanticForce } from './graph/semanticForce';
 
 
 
@@ -81,8 +82,21 @@ if (container) {
   // FISICA DI ATTRAZIONE E REPULSIONE
   graph.d3Force('charge').strength(-180);
   graph.d3Force('link').distance((link: any) => Math.max(20, 120 - (link.weight * 80)));
+  graph.d3Force('semantic', semanticForce());
 
   graph.postProcessingComposer().addPass(createBloom());
+  const clock = new THREE.Clock();
+  const graphScene = graph.scene();
+  (function liveLoop() {
+    const t = clock.getElapsedTime();
+    tickClouds(t);
+    // W3: l'intera rete deriva dolcemente nel vuoto
+    graphScene.position.y = Math.sin(t * 0.15) * 8;
+    graphScene.position.x = Math.sin(t * 0.09) * 6;
+    graphScene.rotation.y = Math.sin(t * 0.05) * 0.02;
+    requestAnimationFrame(liveLoop);
+  })();
+
   const scene = graph.scene();
   scene.add(new THREE.AmbientLight(0xffffff, 0.35));
   const key = new THREE.DirectionalLight(0xffffff, 1.1);
@@ -187,6 +201,7 @@ if (container) {
       lastLinkCount = links.length;
     }
     graph.graphData({ nodes, links });
+    graph.d3ReheatSimulation();
     if (is2D && graph2d) graph2d.graphData({ nodes, links });
 
   };

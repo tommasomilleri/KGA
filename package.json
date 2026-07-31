@@ -17,6 +17,9 @@
     "fuse.js": "^7.0.0",
     "graphology": "^0.25.4",
     "graphology-communities-louvain": "^2.0.1",
+    "html2pdf.js": "^0.14.0",
+    "katex": "^0.18.1",
+    "marked": "^18.0.7",
     "three": "^0.185.1",
     "tweakpane": "^4.0.5"
   },
