@@ -19,7 +19,7 @@ async function generateEssayMarkdown(): Promise<string> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: localStorage.getItem('kga-model') ?? 'llama3.1:8b',
+      model: localStorage.getItem('kga-model') || 'llama3.1:8b',
       stream: false,
       options: { num_predict: 2500 },
       prompt: `Sei un saggista accademico. Scrivi in ITALIANO un saggio organico
@@ -81,7 +81,7 @@ export async function exportEssayPDF(
     html2canvas: { scale: 2 },
     jsPDF: { unit: 'mm', format: 'a4' },
     pagebreak: { mode: ['avoid-all', 'css'] },
-  }).from(el).save();
+  }as any).from(el).save();
   onProgress('PDF scaricato');
 }
 

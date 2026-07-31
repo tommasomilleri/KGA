@@ -1,3 +1,5 @@
+
+
 import * as THREE from 'three';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { KGNode } from '../core/types';
@@ -8,16 +10,48 @@ export function createBloom(): UnrealBloomPass {
     new THREE.Vector2(window.innerWidth, window.innerHeight),
     0.35,   // strength
     0.25,   // radius
-    0.55,  // threshold
+    0.55,   // threshold
   );
   return pass;
 }
 
-const NODE_CLOUDS: THREE.Points[] = [];   // registro per l'animazione
+// ============ NUVOLE DI PUNTI ============
+
+// registro per id: la nuvola si crea UNA volta sola per nodo
+// (SOSTITUISCE il vecchio array NODE_CLOUDS: eliminalo)
+const CLOUD_BY_ID = new Map<string, THREE.Points>();
+
+// seed deterministico: stesso nodo = stessa nuvola
+function hashString(s: string): number {
+  let h = 1779033703;
+  for (let i = 0; i < s.length; i++) {
+    h = Math.imul(h ^ s.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return h >>> 0;
+}
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function isDimmed(id: string): boolean {
+  return Boolean(
+    (highlight.hoverId && !highlight.neighbors.has(id)) ||
+    (highlight.focusId && !highlight.focusVisible.has(id)),
+  );
+}
+
+export function nodeObject(node: KGNode): THREE.Points {
+  const CLOUD_COUNT = { low: 1500, mid: 3000, high: 5000 }[deviceClass()];
 
 export function nodeObject(node: KGNode): THREE.Points {
   const baseSize = 4 + Math.min((node.degree ?? 0) * 1.2, 10);
-  const COUNT = CLOUD_COUNT;                       // se lagga con 100+ nodi: usa 150
+  const COUNT = CLOUD_COUNT;
   const positions = new Float32Array(COUNT * 3);
   const seeds = new Float32Array(COUNT);
 
@@ -25,7 +59,8 @@ export function nodeObject(node: KGNode): THREE.Points {
     const u = Math.random(), v = Math.random();
     const theta = 2 * Math.PI * u;
     const phi = Math.acos(2 * v - 1);
-    const r = baseSize * Math.cbrt(Math.random());
+    // SUPERFICIE: raggio quasi fisso, solo un velo di spessore (±6%)
+    const r = baseSize * (0.94 + Math.random() * 0.12);
     positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
     positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
     positions[i * 3 + 2] = r * Math.cos(phi);
@@ -47,20 +82,31 @@ export function nodeObject(node: KGNode): THREE.Points {
     uniforms: {
       uTime:  { value: 0 },
       uColor: { value: new THREE.Color(node.color || '#ffffff') },
-      uAlpha: { value: dimmed ? 0.06 : 0.55 },
+      uAlpha: { value: dimmed ? 0.05 : 0.5 },
     },
     vertexShader: `
       attribute float seed;
       uniform float uTime;
       varying float vFade;
+
       void main() {
-        vec3 p = position;
-        float breathe = 1.0 + 0.06 * sin(uTime * 0.8 + seed);
-        p += normalize(p + 0.0001) * 0.35 * sin(uTime * 1.7 + seed * 7.0);
-        p *= breathe;
-        vFade = 0.55 + 0.45 * sin(uTime * 1.3 + seed * 3.0);
+        vec3 dir = normalize(position);
+
+        // INCRESPATURA AMORFA: 3 onde direzionali sfasate che deformano
+        // il raggio lungo la superficie (lobi lenti che si muovono)
+        float ripple =
+            0.10 * sin(uTime * 0.7  + dot(dir, vec3( 3.1,  1.7, 2.3)) * 2.0)
+          + 0.07 * sin(uTime * 1.1  + dot(dir, vec3(-2.2,  3.4, 1.1)) * 3.0)
+          + 0.05 * sin(uTime * 1.7  + dot(dir, vec3( 1.4, -2.8, 3.7)) * 5.0);
+
+        // micro-brulichio individuale dei punti lungo la normale
+        float shimmer = 0.02 * sin(uTime * 2.0 + seed * 11.0);
+
+        vec3 p = position * (1.0 + ripple + shimmer);
+
+        vFade = 0.65 + 0.35 * sin(uTime * 1.3 + seed * 3.0);
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_PointSize = (2.2 * vFade) * (140.0 / -mv.z);
+        gl_PointSize = max(1.5, (1.6 * vFade) * (160.0 / -mv.z));
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
@@ -79,20 +125,21 @@ export function nodeObject(node: KGNode): THREE.Points {
   NODE_CLOUDS.push(cloud);
   return cloud;
 }
+export function setCloudDim(id: string, dimmed: boolean): void {
+  const c = CLOUD_BY_ID.get(id);
+  if (c) (c.material as THREE.ShaderMaterial).uniforms.uAlpha.value = dimmed ? 0.06 : 0.55;
+}
+
+export function refreshCloudDim(): void {
+  CLOUD_BY_ID.forEach((_, id) => setCloudDim(id, isDimmed(id)));
+}
+
+export function invalidateCloud(id: string): void { CLOUD_BY_ID.delete(id); }
+export function clearClouds(): void { CLOUD_BY_ID.clear(); }
 
 export function tickClouds(time: number): void {
-  for (let i = NODE_CLOUDS.length - 1; i >= 0; i--) {
-    const c = NODE_CLOUDS[i];
-    if (!c.parent) { NODE_CLOUDS.splice(i, 1); continue; }
+  CLOUD_BY_ID.forEach((c, id) => {
+    if (!c.parent) { CLOUD_BY_ID.delete(id); return; }   // nodo rimosso dalla scena
     (c.material as THREE.ShaderMaterial).uniforms.uTime.value = time;
-  }
+  });
 }
-function deviceClass(): 'low'|'mid'|'high' {
-      const cores = navigator.hardwareConcurrency ?? 4;
-      const touch = matchMedia('(pointer: coarse)').matches;
-      if (touch || cores <= 4) return 'low';
-      if (cores <= 8) return 'mid';
-      return 'high';
-    }
-    const CLOUD_COUNT = { low: 500, mid: 1200, high: 2200 }[deviceClass()];
-

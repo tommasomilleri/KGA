@@ -12,7 +12,7 @@ import { classifyRelations } from './ai/relations';
 import { streamDefinition } from './ai/ollama';
 import { enqueue } from './ai/queue';
 import { assignClusters } from './graph/clusters';
-import { createBloom, nodeObject, tickClouds } from './graph/effects';
+import { createBloom, nodeObject, tickClouds, refreshCloudDim, invalidateCloud, clearClouds } from './graph/effects';
 import { highlight, computeNeighbors, computeNeighborhood } from './graph/highlight';
 import { summarizeCluster } from './ai/summarize';
 import { createMinimap } from './graph/minimap';
@@ -57,7 +57,7 @@ if (container) {
       highlight.neighbors = node
         ? computeNeighbors(node.id, graph.graphData().links as KGLink[])
         : new Set();
-      graph.nodeThreeObject(graph.nodeThreeObject()); // forza il re-render dei nodi
+      refreshCloudDim(); // forza il re-render dei nodi
     })
 
   graph
@@ -438,7 +438,7 @@ if (container) {
         lastClickedId, graph.graphData().links as KGLink[], 2,
       );
     }
-    graph.nodeThreeObject(graph.nodeThreeObject());
+    refreshGraph();
   });
 
 
