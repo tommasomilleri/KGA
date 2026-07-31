@@ -58,9 +58,17 @@ if (container) {
         ? computeNeighbors(node.id, graph.graphData().links as KGLink[])
         : new Set();
       refreshCloudDim(); // forza il re-render dei nodi
+      graph.linkColor(graph.linkColor()); // forza il re-render dei link
     })
 
   graph
+    .linkCurvature(0.15)
+    .linkCurveRotation((l: any) => {
+      const link = l as KGLink;
+      let h=0;
+      for (const c of link.id) h=(h*31+c.charCodeAt(0))|0;
+      return (h%628)/100;
+    })
     .linkColor((l: any) => {
       const link = l as KGLink;
       const src = typeof link.source === 'object' ? (link.source as unknown as KGNode).id : link.source;
@@ -70,12 +78,16 @@ if (container) {
         (!highlight.focusId || (highlight.focusVisible.has(src) && highlight.focusVisible.has(tgt)));
       if (!active) return 'rgba(255,255,255,0.02)';
       if (link.origin === 'manual') return '#FCE676';
-      const a = 0.06 + Math.pow(link.weight, 2) * 0.38;
+      //const a = 0.06 + Math.pow(link.weight, 2) * 0.38;
+      const isHoverLink = highlight.hoverId && (src===highlight.hoverId || tgt === highlight.hoverId);
+      const boost = isHoverLink ? 0.35 : 0;
+      const a = Math.min(0.85, 0.06 + Math.pow(link.weight, 2) * 0.38 + boost);
       return `rgba(160,200,255,${a.toFixed(2)})`;
     })
     .linkWidth((l: any) => 0.3 + Math.pow((l as KGLink).weight, 2) * 2)
     .linkDirectionalParticles((l: any) => ((l as KGLink).weight > 0.8 ? 2 : 0))
-    .linkDirectionalParticleSpeed(0.004)
+    .linkDirectionalParticleSpeed((l:any)=> 0.02 + (l as KGLink).weight * 0.004)
+    .linkDirectionalParticleWidth((l:any)=> 1.2 + (l as KGLink).weight * 1.5)
     .linkOpacity(1);
   // FISICA DI ATTRAZIONE E REPULSIONE
   graph.d3Force('charge').strength(-180);
