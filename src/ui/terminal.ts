@@ -16,7 +16,7 @@ export interface TerminalActions {
 }
 
 
-const COMMANDS = [
+const COMMANDS = ['/aggiungi',
   '/cerca', '/collega', '/elimina', '/rinomina', '/scopri',
   '/ricalcola', '/soglia', '/modello', '/esporta', '/aiuto', '/font', '/ytkey', '/saggio', 
 ];
@@ -30,14 +30,15 @@ export function initTerminal(actions: TerminalActions): void {
   const hint = document.getElementById('cmd-hint')!;
   const history: string[] = JSON.parse(localStorage.getItem('kga-history') ?? '[]');
   let hIndex = history.length;
-
+  let flashTimer : ReturnType<typeof setTimeout>;
   const flash = (msg: string, ok = true) => {
+    clearTimeout(flashTimer);
     hint.textContent = msg;
     hint.style.color = ok ? 'var(--ok)' : 'var(--err)';
     setTimeout(() => { hint.textContent = ''; }, 2500);
   };
 
-
+  
   // ghost text: mostra la parte mancante in grigio dopo il testo digitato
   let items: string[] = [];
   let selected = -1;
@@ -135,8 +136,11 @@ export function initTerminal(actions: TerminalActions): void {
         catch (err) { flash(err instanceof Error ? err.message : 'errore saggio', false); }
         break;
       }
+      case '/aggiungi': 
+      if(!arg) { flash('uso: \aggiungi TERMINE', false); break; }
+      else {actions.addNode(arg); flash(`+ ${arg}`); break; }
 
-      case '/aiuto': flash(COMMANDS.join('  ')); break;
+      case '/aiuto': flash('aggiungi: scrivi testo + INVIO oppure \aggiungi TERMINE' + COMMANDS.join('  ')); break;
       default: flash(`comando sconosciuto: ${cmd}`, false);
       
     }
@@ -159,7 +163,7 @@ export function initTerminal(actions: TerminalActions): void {
         input.value = items[selected];    // Enter su comando parziale: completa
         closeList(); return;
       }
-      closeList(); run(input.value); input.value = ''; hint.textContent = '';
+      closeList(); run(input.value); input.value = '';
     } else if (e.key === 'ArrowUp' && !items.length) {
       e.preventDefault();
       if (hIndex > 0) { hIndex--; input.value = history[hIndex]; }
