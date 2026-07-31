@@ -434,7 +434,57 @@ if (container) {
     graph.cameraPosition({ x: 0, y: 0, z: 250 }, { x: 0, y: 0, z: 0 }, 1500);
     await refreshGraph();
   };
+    // RIPARA: rigenera definizioni (e embedding) dei nodi rimasti senza descrizione
+  const handleRepair = async () => {
+    const nodes = await db.nodes.toArray();
+    const broken = nodes.filter((n) => {
+      const info = String(n.info ?? '').trim();
+      return info === ''
+        || info.startsWith('⏳')                                  // placeholder mai completato
+        || info.startsWith('Definizione non disponibile');        // errore AI offline
+    });
+    if (broken.length === 0) { alert('Nessun nodo da riparare ✓'); return; }
+    if (!confirm(`Trovati ${broken.length} nodi senza descrizione:\n\n${
+      broken.slice(0, 10).map((n) => `• ${n.label}`).join('\n')
+    }${broken.length > 10 ? `\n…e altri ${broken.length - 10}` : ''}\n\nRigenerare con l'IA?`)) return;
 
+    for (const node of broken) {
+      enqueue(async () => {
+        try {
+          // 1. embedding mancante? (nodi creati con AI del tutto offline)
+          if (!node.embedding) {
+            const { vector, model } = await embed(node.id);
+            await db.nodes.update(node.id, { embedding: vector, embeddingModel: model });
+            const newLinks = await autoLink(node.id, vector, model);
+            if (newLinks.length > 0) {
+              const pairs = newLinks.map((l) => [l.source, l.target] as [string, string]);
+              const rels = await classifyRelations(pairs).catch(() => []);
+              for (const r of rels) {
+                await db.links.update(linkId(r.da, r.a), { type: r.tipo, label: r.label });
+              }
+            }
+          }
+          // 2. definizione
+          await db.nodes.update(node.id, { info: "⏳ L'IA sta comprendendo l'argomento..." });
+          let fullText = '';
+          for await (const chunk of streamDefinition(node.id)) {
+            fullText += chunk;
+            if (nodeTitle?.innerText === node.id && nodeDesc) nodeDesc.innerText = fullText;
+          }
+          // se lo streaming ha restituito solo il messaggio di errore, non salvarlo come descrizione
+          if (fullText.startsWith('⚠️')) {
+            await db.nodes.update(node.id, { info: 'Definizione non disponibile (AI offline). Riprova quando Ollama e attivo.' });
+          } else {
+            await db.nodes.update(node.id, { info: fullText });
+          }
+          await refreshGraph();
+        } catch (e) {
+          console.error('Riparazione fallita per', node.id, e);
+        }
+      });
+    }
+    alert(`${broken.length} nodi in coda di rigenerazione (guarda le card riempirsi man mano).`);
+  };
   let lastClickedId: string | null = null;
 
   document.addEventListener('keydown', (e) => {
@@ -485,6 +535,7 @@ if (container) {
       }
     },
     recalc: handleRefresh,
+    repair: handleRepair,
     setThreshold,
     setModel: (m) => localStorage.setItem('kga-model', m),
     exportData: async () => {

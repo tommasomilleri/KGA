@@ -9,6 +9,7 @@ export interface TerminalActions {
   renameNode: (oldId: string, newId: string) => Promise<void>;
   discover: () => void;
   recalc: () => void;
+  repair: () => void;  // <-- NUOVO: per la riparazione del grafo
   setThreshold: (v: number) => void;
   setModel: (m: string) => void;
   exportData: () => void;
@@ -16,7 +17,7 @@ export interface TerminalActions {
 }
 
 
-const COMMANDS = ['/aggiungi',
+const COMMANDS = ['/aggiungi', '/ripara',
   '/cerca', '/collega', '/elimina', '/rinomina', '/scopri',
   '/ricalcola', '/soglia', '/modello', '/esporta', '/aiuto', '/font', '/ytkey', '/saggio', 
 ];
@@ -106,6 +107,7 @@ export function initTerminal(actions: TerminalActions): void {
         else flash('uso: /collega A -> B', false);
         break;
       }
+      case '/ripara': actions.repair(); flash('riparazione grafo…'); break;
       case '/elimina': actions.deleteNode(arg); break;
       case '/rinomina': {
         const [o, n] = arg.split('->').map((s) => s.trim());
