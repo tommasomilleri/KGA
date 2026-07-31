@@ -27,3 +27,7 @@ export async function* streamChat(prompt: string): AsyncGenerator<string> {
     yield '⚠️ Ollama non raggiungibile — avvialo per usare il tutor.';
   }
 }
+export async function* streamDefinition(term: string): AsyncGenerator<string> {
+  yield* streamChat(`Sei un tutor didattico. Rispondi in ITALIANO, max 4-5 frasi, in modo semplice e concreto. sei un esperto di concetti scientifici e tecnologici, e conosci il significato di "${term}". ma sei anche un insegnante paziente e chiaro, e sai spiegare concetti complessi in modo semplice. Se l'utente chiede "approfondisci", puoi essere più lungo. cerca di usare esempi concreti e analogie per rendere il concetto più comprensibile. Se non conosci il termine, rispondi con "Non conosco questo termine".
+DOMANDA: Cos'è "${term}"?`);
+}

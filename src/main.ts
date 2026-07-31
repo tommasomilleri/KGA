@@ -23,6 +23,7 @@ import { renameNode } from './data/mutations';
 import { exportJSON } from './data/db';
 import { findHiddenLinks, applyProposals } from './ai/discovery';
 import { initMusicPlayer } from './ui/music';
+import { cancelTutor, initTutor, setTutorNode } from './ui/tutor';
 import { initSettings } from './ui/settings';
 import { getThreshold } from './ai/similarity';
 import { createGraph2D } from './graph/renderer2d';
@@ -47,10 +48,6 @@ if (container) {
     ">${(n as KGNode).label}</div>
   `)
     .nodeThreeObject((n: any) => nodeObject(n as KGNode))
-    .linkDirectionalParticles((l: any) => Math.round((l as KGLink).weight * 4))
-    .linkDirectionalParticleSpeed(0.004)
-    .linkWidth((l: any) => (l as KGLink).weight * 2)
-    .linkColor((l: any) => ((l as KGLink).origin === 'manual' ? '#FCE676' : 'rgba(255,255,255,0.25)'))
     .linkLabel((l: any) => (l as KGLink).label ?? (l as KGLink).type);
 
   graph
@@ -62,25 +59,29 @@ if (container) {
         : new Set();
       graph.nodeThreeObject(graph.nodeThreeObject()); // forza il re-render dei nodi
     })
-    .linkOpacity(0.9);
 
-  graph.linkColor((l) => {
-    const link = l as KGLink;
-    const src = typeof link.source === 'object' ? (link.source as unknown as KGNode).id : link.source;
-    const tgt = typeof link.target === 'object' ? (link.target as unknown as KGNode).id : link.target;
-    const active =
-      (!highlight.hoverId || (highlight.neighbors.has(src) && highlight.neighbors.has(tgt))) &&
-      (!highlight.focusId || (highlight.focusVisible.has(src) && highlight.focusVisible.has(tgt)));
-    if (!active) return 'rgba(255,255,255,0.03)';
-    return link.origin === 'manual' ? '#FCE676' : 'rgba(255,255,255,0.12)';
-  });
-
+  graph
+    .linkColor((l: any) => {
+      const link = l as KGLink;
+      const src = typeof link.source === 'object' ? (link.source as unknown as KGNode).id : link.source;
+      const tgt = typeof link.target === 'object' ? (link.target as unknown as KGNode).id : link.target;
+      const active =
+        (!highlight.hoverId || (highlight.neighbors.has(src) && highlight.neighbors.has(tgt))) &&
+        (!highlight.focusId || (highlight.focusVisible.has(src) && highlight.focusVisible.has(tgt)));
+      if (!active) return 'rgba(255,255,255,0.02)';
+      if (link.origin === 'manual') return '#FCE676';
+      const a = 0.06 + Math.pow(link.weight, 2) * 0.38;
+      return `rgba(160,200,255,${a.toFixed(2)})`;
+    })
+    .linkWidth((l: any) => 0.3 + Math.pow((l as KGLink).weight, 2) * 2)
+    .linkDirectionalParticles((l: any) => ((l as KGLink).weight > 0.8 ? 2 : 0))
+    .linkDirectionalParticleSpeed(0.004)
+    .linkOpacity(1);
   // FISICA DI ATTRAZIONE E REPULSIONE
   graph.d3Force('charge').strength(-180);
-  graph.d3Force('link').distance((link: any) => Math.max(20, 120 - (link.weight * 80)));
+  graph.d3Force('link').distance((link: any) => {const w = (link as KGLink).weight??0.5; return 40 + Math.pow(1 - w, 1.3) * 110; });
   graph.d3Force('semantic', semanticForce());
 
-  graph.postProcessingComposer().addPass(createBloom());
   const clock = new THREE.Clock();
   const graphScene = graph.scene();
   (function liveLoop() {
@@ -154,13 +155,14 @@ if (container) {
       nodeDesc.innerText = node.info || 'Nessuna informazione disponibile...';
       infoPanel.classList.add('visible');
       renderNodeLinks(node.id);
+      setTutorNode(node.id);   // aggiorna il nodo corrente per il tutor
 
     }
     if (visited[visited.length - 1] !== node.id) { visited.push(node.id); renderBreadcrumb(); }
   };
 
   graph.onNodeClick((n: any) => flyToNode(n as KGNode));
-  closeBtn?.addEventListener('click', () => infoPanel?.classList.remove('visible'));
+  closeBtn?.addEventListener('click', () => {infoPanel?.classList.remove('visible'); cancelTutor();});
 
 
   const visited: string[] = [];
@@ -389,6 +391,7 @@ if (container) {
       nodeDesc.innerText = node.info || '…';
       infoPanel.classList.add('visible');
       renderNodeLinks(node.id);
+      setTutorNode(node.id);   // aggiorna il nodo corrente per il tutor
     }
   };
 
@@ -421,9 +424,6 @@ if (container) {
   };
 
   let lastClickedId: string | null = null;
-  graph.onNodeClick((n) => { lastClickedId = (n as KGNode).id; flyToNode(n as KGNode); });
-  // NOTA: questa riga SOSTITUISCE la vecchia `graph.onNodeClick((n) => flyToNode(n as KGNode));`
-  // eliminala per non avere due handler.
 
   document.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() !== 'f') return;
@@ -485,6 +485,7 @@ if (container) {
   });
 
   initFontLab();
+  initTutor();
   initMusicPlayer();
 
   refreshGraph();
