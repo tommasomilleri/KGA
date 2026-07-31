@@ -17,7 +17,7 @@ const NODE_CLOUDS: THREE.Points[] = [];   // registro per l'animazione
 
 export function nodeObject(node: KGNode): THREE.Points {
   const baseSize = 4 + Math.min((node.degree ?? 0) * 1.2, 10);
-  const COUNT = 300;                       // se lagga con 100+ nodi: usa 150
+  const COUNT = CLOUD_COUNT;                       // se lagga con 100+ nodi: usa 150
   const positions = new Float32Array(COUNT * 3);
   const seeds = new Float32Array(COUNT);
 
@@ -87,4 +87,12 @@ export function tickClouds(time: number): void {
     (c.material as THREE.ShaderMaterial).uniforms.uTime.value = time;
   }
 }
+function deviceClass(): 'low'|'mid'|'high' {
+      const cores = navigator.hardwareConcurrency ?? 4;
+      const touch = matchMedia('(pointer: coarse)').matches;
+      if (touch || cores <= 4) return 'low';
+      if (cores <= 8) return 'mid';
+      return 'high';
+    }
+    const CLOUD_COUNT = { low: 500, mid: 1200, high: 2200 }[deviceClass()];
 

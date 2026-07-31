@@ -311,3 +311,11 @@ body.paper::after { background: none; }   /* niente scanline su carta */
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-r-author { font-size: 9px; color: var(--dim); }
 
+#node-tutor { margin-top: 12px; border-top: 1px dashed var(--border); padding-top: 8px; }
+.tutor-chip { background: none; border: 1px solid var(--border); border-radius: 12px;
+  color: var(--dim); cursor: pointer; padding: 3px 10px; font-size: 11px; margin: 2px; }
+.tutor-chip:hover { color: var(--accent); border-color: var(--accent); }
+#tutor-answer { font-size: 12px; color: var(--text); margin: 8px 0; white-space: pre-wrap;
+  max-height: 180px; overflow-y: auto; }
+#tutor-input { width: 100%; background: none; border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text); padding: 5px 8px; font-size: 12px; }

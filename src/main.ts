@@ -29,10 +29,6 @@ import { createGraph2D } from './graph/renderer2d';
 import { semanticForce } from './graph/semanticForce';
 
 
-
-
-
-
 const container = document.getElementById('app');
 
 if (container) {
