@@ -307,7 +307,7 @@ if (container) {
       graph.controls().autoRotateSpeed = speed;
     },
     setBloom: (on) => { bloomPass.enabled = on; },
-    setNodeScale: (v) => { nodeScale = v; graph.nodeThreeObject(graph.nodeThreeObject()); },
+    setNodeScale: () => {},
     exportData: async () => {
       const blob = new Blob([await exportJSON()], { type: 'application/json' });
       const a = document.createElement('a');
