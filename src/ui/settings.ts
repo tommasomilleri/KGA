@@ -22,7 +22,14 @@ export function initSettings(a: SettingsActions): void {
       <label>Soglia similarità <span id="st-thr-v"></span>
         <input id="st-thr" type="range" min="0.3" max="0.9" step="0.01"></label>
       <label>Modello Ollama
-        <input id="st-model" type="text"></label>
+        <input id="st-model" type="text" list="st-model-list" placeholder="llama3.1:8b"></label>
+        <datalist id="st-model-list">
+          <option value="llama3.1:8b">
+          <option value="llama3.2:3b">
+          <option value="mistral:7b">
+          <option value="gemma2:9b">
+        </datalist>
+      </label>
       <label>Repulsione nodi <span id="st-charge-v"></span>
         <input id="st-charge" type="range" min="-400" max="-40" step="10"></label>
       <label>Velocità particelle <span id="st-part-v"></span>
