@@ -1,5 +1,3 @@
-
-
 import * as THREE from 'three';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { KGNode } from '../core/types';
@@ -17,8 +15,18 @@ export function createBloom(): UnrealBloomPass {
 
 // ============ NUVOLE DI PUNTI ============
 
+// densità adattiva per device (calcolata UNA volta a livello di modulo)
+function deviceClass(): 'low' | 'mid' | 'high' {
+  const cores = navigator.hardwareConcurrency ?? 4;
+  const touch = matchMedia('(pointer: coarse)').matches;
+  if (touch || cores <= 4) return 'low';
+  if (cores <= 8) return 'mid';
+  return 'high';
+}
+const CLOUD_COUNT = { low: 1500, mid: 3000, high: 5000 }[deviceClass()];
+const LAYERS = 3;   // gusci concentrici sfasati (effetto "sovrapposto" ricco)
+
 // registro per id: la nuvola si crea UNA volta sola per nodo
-// (SOSTITUISCE il vecchio array NODE_CLOUDS: eliminalo)
 const CLOUD_BY_ID = new Map<string, THREE.Points>();
 
 // seed deterministico: stesso nodo = stessa nuvola
@@ -47,33 +55,37 @@ function isDimmed(id: string): boolean {
 }
 
 export function nodeObject(node: KGNode): THREE.Points {
-  const CLOUD_COUNT = { low: 1500, mid: 3000, high: 5000 }[deviceClass()];
+  // cache: se esiste già, aggiorna solo l'alpha e riusa
+  const cached = CLOUD_BY_ID.get(node.id);
+  if (cached) {
+    setCloudDim(node.id, isDimmed(node.id));
+    return cached;
+  }
 
-export function nodeObject(node: KGNode): THREE.Points {
+  const rand = mulberry32(hashString(node.id));
   const baseSize = 4 + Math.min((node.degree ?? 0) * 1.2, 10);
   const COUNT = CLOUD_COUNT;
   const positions = new Float32Array(COUNT * 3);
   const seeds = new Float32Array(COUNT);
 
   for (let i = 0; i < COUNT; i++) {
-    const u = Math.random(), v = Math.random();
+    const layer = i % LAYERS;                    // 0, 1, 2, 0, 1, 2...
+    const u = rand(), v = rand();
     const theta = 2 * Math.PI * u;
     const phi = Math.acos(2 * v - 1);
-    // SUPERFICIE: raggio quasi fisso, solo un velo di spessore (±6%)
-    const r = baseSize * (0.94 + Math.random() * 0.12);
+    // 3 gusci concentrici: interno 0.82, medio 0.94, esterno 1.06
+    const shell = 0.82 + layer * 0.12;
+    const r = baseSize * (shell + rand() * 0.08);
     positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
     positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
     positions[i * 3 + 2] = r * Math.cos(phi);
-    seeds[i] = Math.random() * Math.PI * 2;
+    // fase sfasata per layer: i gusci respirano fuori sincrono
+    seeds[i] = rand() * Math.PI * 2 + layer * 2.1;
   }
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setAttribute('seed', new THREE.BufferAttribute(seeds, 1));
-
-  const dimmed =
-    (highlight.hoverId && !highlight.neighbors.has(node.id)) ||
-    (highlight.focusId && !highlight.focusVisible.has(node.id));
 
   const mat = new THREE.ShaderMaterial({
     transparent: true,
@@ -82,7 +94,7 @@ export function nodeObject(node: KGNode): THREE.Points {
     uniforms: {
       uTime:  { value: 0 },
       uColor: { value: new THREE.Color(node.color || '#ffffff') },
-      uAlpha: { value: dimmed ? 0.05 : 0.5 },
+      uAlpha: { value: isDimmed(node.id) ? 0.05 : 0.5 },
     },
     vertexShader: `
       attribute float seed;
@@ -92,14 +104,13 @@ export function nodeObject(node: KGNode): THREE.Points {
       void main() {
         vec3 dir = normalize(position);
 
-        // INCRESPATURA AMORFA: 3 onde direzionali sfasate che deformano
-        // il raggio lungo la superficie (lobi lenti che si muovono)
+        // INCRESPATURA AMORFA: 3 onde direzionali, sfasate per seed/layer
         float ripple =
-            0.10 * sin(uTime * 0.7  + dot(dir, vec3( 3.1,  1.7, 2.3)) * 2.0)
-          + 0.07 * sin(uTime * 1.1  + dot(dir, vec3(-2.2,  3.4, 1.1)) * 3.0)
+            0.10 * sin(uTime * 0.7  + dot(dir, vec3( 3.1,  1.7, 2.3)) * 2.0 + seed * 0.3)
+          + 0.07 * sin(uTime * 1.1  + dot(dir, vec3(-2.2,  3.4, 1.1)) * 3.0 + seed * 0.2)
           + 0.05 * sin(uTime * 1.7  + dot(dir, vec3( 1.4, -2.8, 3.7)) * 5.0);
 
-        // micro-brulichio individuale dei punti lungo la normale
+        // micro-brulichio individuale lungo la normale
         float shimmer = 0.02 * sin(uTime * 2.0 + seed * 11.0);
 
         vec3 p = position * (1.0 + ripple + shimmer);
@@ -122,12 +133,13 @@ export function nodeObject(node: KGNode): THREE.Points {
   });
 
   const cloud = new THREE.Points(geo, mat);
-  NODE_CLOUDS.push(cloud);
+  CLOUD_BY_ID.set(node.id, cloud);
   return cloud;
 }
+
 export function setCloudDim(id: string, dimmed: boolean): void {
   const c = CLOUD_BY_ID.get(id);
-  if (c) (c.material as THREE.ShaderMaterial).uniforms.uAlpha.value = dimmed ? 0.06 : 0.55;
+  if (c) (c.material as THREE.ShaderMaterial).uniforms.uAlpha.value = dimmed ? 0.05 : 0.5;
 }
 
 export function refreshCloudDim(): void {
