@@ -37,13 +37,14 @@ export async function autoLink(term: string, vector: number[], model: string): P
   for (const node of allNodes) {
     if (node.id === term || !node.embedding || node.embeddingModel !== model) continue;
     const sim = cosineSimilarity(vector, node.embedding);
-    if (sim >= currentThreshold) {
-      const id = linkId(term, node.id);
+    const weak = currentThreshold - 0.12;
+    if (sim >= weak) {
+      const strong = sim >= currentThreshold;
       const link: KGLink = {
-        id,
+        id: linkId(term, node.id),
         source: term,
         target: node.id,
-        type: 'semantic_similarity',
+        type: strong ? 'semantic_similarity' : 'weak_similarity',
         weight: Number(sim.toFixed(3)),
         origin: 'auto',
         label: `sim: ${(sim * 100).toFixed(0)}%`,

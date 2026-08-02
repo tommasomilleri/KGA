@@ -65,9 +65,9 @@ if (container) {
     .linkCurvature(0.15)
     .linkCurveRotation((l: any) => {
       const link = l as KGLink;
-      let h=0;
-      for (const c of link.id) h=(h*31+c.charCodeAt(0))|0;
-      return (h%628)/100;
+      let h = 0;
+      for (const c of link.id) h = (h * 31 + c.charCodeAt(0)) | 0;
+      return (h % 628) / 100;
     })
     .linkColor((l: any) => {
       const link = l as KGLink;
@@ -79,19 +79,19 @@ if (container) {
       if (!active) return 'rgba(255,255,255,0.02)';
       if (link.origin === 'manual') return '#FCE676';
       //const a = 0.06 + Math.pow(link.weight, 2) * 0.38;
-      const isHoverLink = highlight.hoverId && (src===highlight.hoverId || tgt === highlight.hoverId);
+      const isHoverLink = highlight.hoverId && (src === highlight.hoverId || tgt === highlight.hoverId);
       const boost = isHoverLink ? 0.35 : 0;
       const a = Math.min(0.85, 0.06 + Math.pow(link.weight, 2) * 0.38 + boost);
       return `rgba(160,200,255,${a.toFixed(2)})`;
     })
     .linkWidth((l: any) => 0.3 + Math.pow((l as KGLink).weight, 2) * 2)
     .linkDirectionalParticles((l: any) => ((l as KGLink).weight > 0.8 ? 2 : 0))
-    .linkDirectionalParticleSpeed((l:any)=> 0.02 + (l as KGLink).weight * 0.004)
-    .linkDirectionalParticleWidth((l:any)=> 1.2 + (l as KGLink).weight * 1.5)
+    .linkDirectionalParticleSpeed((l: any) => 0.02 + (l as KGLink).weight * 0.004)
+    .linkDirectionalParticleWidth((l: any) => 1.2 + (l as KGLink).weight * 1.5)
     .linkOpacity(1);
   // FISICA DI ATTRAZIONE E REPULSIONE
   graph.d3Force('charge').strength(-180);
-  graph.d3Force('link').distance((link: any) => {const w = (link as KGLink).weight??0.5; return 40 + Math.pow(1 - w, 1.3) * 110; });
+  graph.d3Force('link').distance((link: any) => { const w = (link as KGLink).weight ?? 0.5; return 40 + Math.pow(1 - w, 1.3) * 110; });
   graph.d3Force('semantic', semanticForce());
 
   const clock = new THREE.Clock();
@@ -174,7 +174,7 @@ if (container) {
   };
 
   graph.onNodeClick((n: any) => flyToNode(n as KGNode));
-  closeBtn?.addEventListener('click', () => {infoPanel?.classList.remove('visible'); cancelTutor();});
+  closeBtn?.addEventListener('click', () => { infoPanel?.classList.remove('visible'); cancelTutor(); });
 
 
   const visited: string[] = [];
@@ -282,7 +282,11 @@ if (container) {
             if (nodeTitle?.innerText === term && nodeDesc) nodeDesc.innerText = fullText;
           }
           await db.nodes.update(term, { info: fullText });
+          const rich = await embed(`${term}.${fullText.slice(0, 300)}`);
+          await db.nodes.update(term, { embedding: rich.vector, embeddingModel: rich.model });
+          await autoLink(term, rich.vector, rich.model);
           await refreshGraph();
+
         } catch (e) {
           console.error('AI fallita per', term, e);
           await db.nodes.update(term, {
@@ -291,6 +295,7 @@ if (container) {
           await refreshGraph();
         }
       });
+
     } catch (error) {
       if (error instanceof Error && error.message === 'DUPLICATE') {
         alert(`Il termine "${term}" esiste gia nel tuo Secondo Cervello!`);
@@ -298,6 +303,7 @@ if (container) {
         console.error(error);
       }
     }
+
   };
 
   let bloomPass = createBloom();               // tieni il riferimento
@@ -317,7 +323,7 @@ if (container) {
       graph.controls().autoRotateSpeed = speed;
     },
     setBloom: (on) => { bloomPass.enabled = on; },
-    setNodeScale: () => {},
+    setNodeScale: () => { },
     exportData: async () => {
       const blob = new Blob([await exportJSON()], { type: 'application/json' });
       const a = document.createElement('a');
@@ -434,7 +440,7 @@ if (container) {
     graph.cameraPosition({ x: 0, y: 0, z: 250 }, { x: 0, y: 0, z: 0 }, 1500);
     await refreshGraph();
   };
-    // RIPARA: rigenera definizioni (e embedding) dei nodi rimasti senza descrizione
+  // RIPARA: rigenera definizioni (e embedding) dei nodi rimasti senza descrizione
   const handleRepair = async () => {
     const nodes = await db.nodes.toArray();
     const broken = nodes.filter((n) => {
@@ -444,9 +450,8 @@ if (container) {
         || info.startsWith('Definizione non disponibile');        // errore AI offline
     });
     if (broken.length === 0) { alert('Nessun nodo da riparare ✓'); return; }
-    if (!confirm(`Trovati ${broken.length} nodi senza descrizione:\n\n${
-      broken.slice(0, 10).map((n) => `• ${n.label}`).join('\n')
-    }${broken.length > 10 ? `\n…e altri ${broken.length - 10}` : ''}\n\nRigenerare con l'IA?`)) return;
+    if (!confirm(`Trovati ${broken.length} nodi senza descrizione:\n\n${broken.slice(0, 10).map((n) => `• ${n.label}`).join('\n')
+      }${broken.length > 10 ? `\n…e altri ${broken.length - 10}` : ''}\n\nRigenerare con l'IA?`)) return;
 
     for (const node of broken) {
       enqueue(async () => {

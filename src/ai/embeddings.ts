@@ -8,13 +8,18 @@ async function ollamaEmbed(text: string): Promise<EmbeddingResult | null> {
     const r = await fetch(`${OLLAMA}/api/embed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'nomic-embed-text', input: text }),
+      body: JSON.stringify({ 
+        model: 'nomic-embed-text', 
+        input: 'search_document ${text}',
+       }),
     });
     if (!r.ok) return null;
     const data = await r.json();
-    return { vector: data.embeddings[0], model: 'nomic-embed-text' };
+    const vec = data.embeddings[0]?.[0]?? data.embeddings;
+    if (!Array.isArray(vec)||vec.length === 0) return null;
+    return { vector: vec, model: 'nomic-embed-text' };
   } catch { return null; }
-}
+} 
 
 // --- Worker: il modello browser non blocca piu' l'UI ---
 let worker: Worker | null = null;
